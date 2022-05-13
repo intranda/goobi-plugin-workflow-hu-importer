@@ -104,8 +104,8 @@
                                                             var="importset"
                                                             value="#{NavigationForm.workflowPlugin.importSets}">
                                                             <li><button jsf:action="#{NavigationForm.workflowPlugin.startImport(importset)}"
-                                                                    aria-label="#{importset.title}" class="dropdown-item">
-                                                                    <h:outputText value="#{importset.title}" />
+                                                                    aria-label="#{importset.name}" class="dropdown-item">
+                                                                    <h:outputText value="#{importset.name}" />
                                                                 </button>
                                                             </li>
                                                         </ui:repeat>

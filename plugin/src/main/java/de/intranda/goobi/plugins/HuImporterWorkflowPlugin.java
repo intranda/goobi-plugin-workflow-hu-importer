@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.commons.configuration.HierarchicalConfiguration;
+import org.apache.commons.configuration.XMLConfiguration;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginType;
@@ -47,6 +48,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     private List<ImportSet> importSets;
     private PushContext pusher;
+    private XMLConfiguration config=null;
+    private HierarchicalConfiguration mappingNode = null;
     @Getter
     private boolean run = false;
     @Getter
@@ -79,6 +82,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
         // read important configuration first
         readConfiguration();
+        
     }
 
     /**
@@ -86,21 +90,27 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     private void readConfiguration() {
     	updateLog("Start reading the configuration");
+    	updateLog("HotSwap is working");
+    	updateLog("HotSwap is working");
     	
+    	config = ConfigPlugins.getPluginConfig(title);
         // read some main configuration
-        importFolder = ConfigPlugins.getPluginConfig(title).getString("importFolder");
-        workflow = ConfigPlugins.getPluginConfig(title).getString("workflow");
-        publicationType = ConfigPlugins.getPluginConfig(title).getString("publicationType");
+        importFolder = config.getString("importFolder");
+        workflow = config.getString("workflow");
+        publicationType = config.getString("publicationType");
         
         // read list of mapping configuration
         importSets = new ArrayList<ImportSet>();
-        List<HierarchicalConfiguration> mappings = ConfigPlugins.getPluginConfig(title).configurationsAt("importSet");
+        List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
         for (HierarchicalConfiguration node : mappings) {
-            String settitle = node.getString("[@title]", "-");
-            String source = node.getString("[@source]", "-");
-            String target = node.getString("[@target]", "-");
-            boolean person = node.getBoolean("[@person]", false);
-            importSets.add(new ImportSet(settitle, source, target, person));
+            String name = node.getString("[@name]", "-");
+            String metadataFolder = node.getString("[@metadataFolder]", "-");
+            String mediaFolder = node.getString("[@mediaFolder]", "-");
+            String workflow = node.getString("[@workflow]", "-");
+            String project = node.getString("[@project]", "-");
+            String mapping = node.getString("[@mapping]", "-");
+            String publicationType =node.getString("[@publicationType]", "-");
+            importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mapping, publicationType));
         }
         
         // write a log into the UI
@@ -119,10 +129,46 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * 
      * @param importConfiguration
      */
-    public void startImport(ImportSet importset) {
-    	updateLog("Start import for: " + importset.getTitle());
+    public void startImport(ImportSet importSet) {
+    	updateLog("Start import for: " + importSet.getName());
         progress = 0;
         BeanHelper bhelp = new BeanHelper();
+        
+        // find the correct mapping node
+        mappingNode = null;
+        for (HierarchicalConfiguration node : config.configurationsAt("mapping")) {
+            String name = node.getString("[@name]");
+            if (name.equals(importSet.getMapping())) {
+                log.debug("Configured mapping was found: " + name);
+                mappingNode = node;
+                break;
+            }
+        }
+        // if mapping node was not found, send back error message
+        if (mappingNode == null) {
+            updateLog("Import could not be executed as no configuration node was found for " + importSet + importSet.getName() + " with mapping "
+                    + importSet.getMapping());
+            return;
+        }
+        
+        // create a list of all fields to import
+        List<MappingField> mappingFields = new ArrayList<MappingField>();
+        List<HierarchicalConfiguration> fields = mappingNode.configurationsAt("field");
+        for (HierarchicalConfiguration field : fields) {
+            String column = field.getString("[@column]");
+            String label = field.getString("[@label]");
+            String mets = field.getString("[@mets]");
+            String metsGroup = field.getString("[@metsGroup]");
+            String ead = field.getString("[@ead]");
+            String type = field.getString("[@type]");
+            String separator = field.getString("[@separator]");
+            boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
+            boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
+            boolean useAsProcessTitle = field.getBoolean("[@useAsProcessTitle]", false);
+            boolean person = field.getBoolean("[@person]", false);
+            mappingFields.add(new MappingField(column, label, mets, metsGroup, ead, type, separator, blankBeforeSeparator, blankAfterSeparator, useAsProcessTitle, person));
+        }
+        //log.debug("List of fields: " + importfields);
         
         // run the import in a separate thread to allow a dynamic progress bar
         run = true;
@@ -179,22 +225,28 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         dd.setLogicalDocStruct(logical);
 
                         // create the metadata fields by reading the config (and get content from the content files of course)
-                        for (ImportSet importSet : importSets) {
+                        for (MappingField mappingField : mappingFields) {
                             // treat persons different than regular metadata
-                            if (importSet.isPerson()) {
-                            	updateLog("Add person '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                                Person p = new Person(prefs.getMetadataTypeByName(importSet.getTarget()));
-                                String firstname = importSet.getSource().substring(0, importSet.getSource().indexOf(" "));
-                                String lastname = importSet.getSource().substring(importSet.getSource().indexOf(" "));
+                                             
+                            if (mappingField.isPerson()) {
+                            	updateLog("Add person '" + mappingField.getMets() + "' with value '" + mappingField.getColumn() + "'");
+                                Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
+                                String firstname = mappingField.getMets().substring(0, mappingField.getColumn().indexOf(" "));
+                                String lastname = mappingField.getMets().substring(mappingField.getColumn().indexOf(" "));
                                 p.setFirstname(firstname);
                                 p.setLastname(lastname);
                                 logical.addPerson(p);       
                             } else {
-                            	updateLog("Add metadata '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                                Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(importSet.getTarget()));
-                                mdTitle.setValue(importSet.getSource());
+                            	updateLog("Add metadata '" + mappingField.getMets() + "' with value '" + mappingField.getColumn() + "'");
+                                Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
+                                mdTitle.setValue(mappingField.getColumn());
                                 logical.addMetadata(mdTitle);
                             }
+                            updateLog("TEST: "+ mappingField.getColumn() +" "+mappingField.getMets());
+                        }
+                        
+                        for (String Path: StorageProvider.getInstance().list("/opt/digiverso/import/sample")) {
+                            updateLog("Datei: "+Path);
                         }
 
                         // save the process
@@ -278,11 +330,30 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 	
     @Data
     @AllArgsConstructor
-    public class ImportSet {
-        private String title;
-        private String source;
-        private String target;
+    public class MappingField {
+        private String column;
+        private String label;
+        private String mets;
+        private String metsGroup;
+        private String ead;
+        private String type;
+        private String separator;
+        private boolean blankBeforeSeparator;
+        private boolean blankAfterSeparator;
+        private boolean useAsProcessTitle;
         private boolean person;
+    }
+	
+    @Data
+    @AllArgsConstructor
+    public class ImportSet {
+        private String name;
+        private String metadataFolder;
+        private String mediaFolder;
+        private String workflow;
+        private String project;
+        private String mapping;
+        private String publicationType;
     }
 
     @Data
