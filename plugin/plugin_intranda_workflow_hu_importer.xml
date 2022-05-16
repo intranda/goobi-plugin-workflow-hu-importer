@@ -9,7 +9,7 @@
 		mappingSet: the mapping that shall be used by the import set
 		publicationType: the publicationType that shall be used i.e. Monograph,...
         -->
-	<importSet name="a" 
+	<importSet name="TestImportSet" 
 		metadataFolder="" 
 		mediaFolder ="/foo/bar/efolder" 
 		workflow="Sample_Workflow" 
