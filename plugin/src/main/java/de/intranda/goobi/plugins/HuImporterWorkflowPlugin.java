@@ -228,7 +228,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 itemCurrent = 0;
 
                 for (Path processFile : FilesToRead) {
-                    boolean successful=true;
+                    boolean successful = true;
                     Thread.sleep(100);
                     if (!run) {
                         break;
@@ -237,14 +237,18 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     FileInputStream inputStream = new FileInputStream(new File(processFile.toString()));
                     Workbook workbook = new XSSFWorkbook(inputStream);
                     Sheet sheet = workbook.getSheetAt(0);
-
+                    
+                    String filename = processFile.getFileName().toString();
+                    if (filename.contains(".")) {
+                        filename = filename.substring(0, filename.lastIndexOf("."));
+                    }
                     String processname = UUID.randomUUID().toString();
 
                     if (importSet.isUseFileNameAsProcessTitle()) {
-                        processname = processFile.getFileName().toString();
+                        processname = filename;
                     }
                     String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
-                    processname = processname.substring(0, processname.lastIndexOf(".")).replaceAll(regex, "_").trim();
+                    processname = filename.replaceAll(regex, "_").trim();
                     if (ProcessManager.countProcessTitle(processname, null) > 0) {
                         int tempCounter = 1;
                         String tempName = processname + "_" + tempCounter;
@@ -291,7 +295,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
                         dd.setLogicalDocStruct(logical);
                         MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
-
+                                               
                         // save the process
                         Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
 
@@ -300,6 +304,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         dd = fileformat.getDigitalDocument();
                         logical = dd.getLogicalDocStruct();
                         physical = dd.getPhysicalDocStruct();
+                        
+                        //add TitleDocMain
+                        Metadata title = new Metadata(prefs.getMetadataTypeByName("TitleDocMain"));
+                        title.setValue(filename);
+                        logical.addMetadata(title);
 
                         String imagesTifDirectory = process.getImagesTifDirectory(false);
 
@@ -324,6 +333,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     if (StringUtils.isNotBlank(mappingField.getType())) {
                                         switch (mappingField.getType()) {
                                             case "person":
+                                                if (mappingField.getMets()==null) {
+                                                    updateLogAndProcess(process.getId(),"No Mets provided. Please update the Mapping "+ importSet.getMapping(), 3);
+                                                    break;
+                                                }
                                                 updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
                                                 Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
                                                 String firstname = cellContent.substring(0, cellContent.indexOf(" "));
@@ -341,9 +354,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                             .findFirst()
                                                             .orElse(null);
                                                     if (imageFile == null) {
-                                                        updateLogAndProcess(process.getId(), "Couldn't find file with the name: " + imageFileName
-                                                                + " in media folder: " + importSet.getMediaFolder(), 3);
-                                                        successful=false;
+                                                        updateLogAndProcess(process.getId(),
+                                                                "Couldn't import the following file: " + importSet.getMediaFolder() + imageFileName,
+                                                                3);
+                                                        successful = false;
                                                     } else {
                                                         Path masterFolder = Paths.get(process.getImagesOrigDirectory(false));
                                                         if (!storageProvider.isFileExists(masterFolder))
@@ -353,25 +367,30 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                             storageProvider.copyFile(imageFile.toPath(),
                                                                     Paths.get(masterFolder.toString(), imageFile.getName()));
                                                         } else {
-                                                            updateLogAndProcess(process.getId(), "Couldn't read file with the name: " + imageFileName
-                                                                    + " in media folder: " + importSet.getMediaFolder(), 3);
-                                                            successful=false;
+                                                            updateLogAndProcess(process.getId(),"Couldn't read the following file: " + importSet.getMediaFolder() + imageFileName,
+                                                                    3);
+                                                            successful = false;
                                                         }
                                                     }
                                                 }
                                                 break;
-                                            case "node":
+                                            case "metadata":
+                                                if (mappingField.getMets()==null) {
+                                                    updateLogAndProcess(process.getId(),"No Mets provided. Please update the Mapping "+ importSet.getMapping(), 3);
+                                                    break;
+                                                }
                                                 Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
                                                 md.setValue(cellContent);
                                                 ds.addMetadata(md);
                                                 break;
-                                                
+
                                             default:
-                                                successful=false;
-                                                updateLogAndProcess(process.getId(),"the specified type: "+mappingField.getType() +" is not supported",3);
+                                                successful = false;
+                                                updateLogAndProcess(process.getId(),
+                                                        "the specified type: " + mappingField.getType() + " is not supported", 3);
                                         }
                                         logical.addChild(ds);
-                                    }            
+                                    }
                                 }
                             }
                         }
@@ -379,7 +398,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         // add some properties
                         bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
                         bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
-                        
 
                         // write the metsfile
                         process.writeMetadataFile(fileformat);
@@ -396,7 +414,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
                             updateLog("Process successfully created with ID: " + process.getId());
                         } else {
-                            updateLogAndProcess(process.getId(),"Process created with ID: " + process.getId(),3);
+                            updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
                             for (Step s : process.getSchritteList()) {
                                 if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
                                     s.setBearbeitungsstatusEnum(StepStatus.ERROR);
@@ -542,7 +560,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     }
 
     private void updateLogAndProcess(int processId, String message, int level) {
-        Helper.addMessageToProcessLog(processId, LogType.INFO, message);
+        LogType type = (level == 3) ? LogType.ERROR :(level==1)? LogType.DEBUG :LogType.INFO;
+
+        Helper.addMessageToProcessLog(processId, type, message);
         updateLog(message, level);
     }
 
@@ -566,7 +586,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         @NonNull
         private String column;
         private String label;
-        @NonNull
         private String mets;
         private String metsGroup;
         private String ead;

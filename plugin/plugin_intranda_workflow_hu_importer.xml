@@ -22,8 +22,8 @@
 		/>
 		
 	<mappingSet name="Monograph">
-		<field column="D" label="Inventar-Nr./Signatur" type="node" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="node" mets="TitleDocMainShort"/>
+		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="TitleDocMainShort"/>
+		<field column="M,N" label="Datei recto" type="metadata" mets="TitleDocMainShort"/>
 		<field column="M,N" label="Datei recto" type="media" mets="TitleDocMainShort"/>
 		<field column="J" label="Maße" type="node" mets="TitleDocMainShort"/>
 		<field column="O" label="Author" type="person" mets="Author"/>
