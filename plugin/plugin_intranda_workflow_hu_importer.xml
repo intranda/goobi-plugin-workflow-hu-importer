@@ -23,13 +23,10 @@
 		
 	<mappingSet name="Monograph">
 		<field column="D" label="Inventar-Nr./Signatur" type="node" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="default" mets="TitleDocMainShort"/>
+		<field column="M,N" label="Datei recto" type="node" mets="TitleDocMainShort"/>
 		<field column="M,N" label="Datei recto" type="media" mets="TitleDocMainShort"/>
 		<field column="J" label="Maße" type="node" mets="TitleDocMainShort"/>
 		<field column="O" label="Author" type="person" mets="Author"/>
-		<!--field column="C" label="Titel" mets="ISBN" />
-		<field column="D" label="Signatur(en)" mets="shelfmarksource"/>
-		<field column="Max Mustermann" title="E"  label="Name" mets="Author" person="true"/-->
 	</mappingSet>
 	
 </config_plugin>

@@ -228,6 +228,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 itemCurrent = 0;
 
                 for (Path processFile : FilesToRead) {
+                    boolean successful=true;
                     Thread.sleep(100);
                     if (!run) {
                         break;
@@ -342,33 +343,35 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                     if (imageFile == null) {
                                                         updateLogAndProcess(process.getId(), "Couldn't find file with the name: " + imageFileName
                                                                 + " in media folder: " + importSet.getMediaFolder(), 3);
+                                                        successful=false;
                                                     } else {
+                                                        Path masterFolder = Paths.get(process.getImagesOrigDirectory(false));
+                                                        if (!storageProvider.isFileExists(masterFolder))
+                                                            storageProvider.createDirectories(masterFolder);
                                                         if (imageFile.canRead()) {
                                                             addPage(physical, ds, dd, imageFile, ++PageCount);
                                                             storageProvider.copyFile(imageFile.toPath(),
-                                                                    Paths.get(process.getImagesOrigDirectory(true), imageFile.getName()));
+                                                                    Paths.get(masterFolder.toString(), imageFile.getName()));
                                                         } else {
-                                                            updateLogAndProcess(process.getId(),"Couldn't read file with the name: " + imageFileName + " in media folder: "
-                                                                    + importSet.getMediaFolder(), 3);
+                                                            updateLogAndProcess(process.getId(), "Couldn't read file with the name: " + imageFileName
+                                                                    + " in media folder: " + importSet.getMediaFolder(), 3);
+                                                            successful=false;
                                                         }
                                                     }
                                                 }
                                                 break;
-                                            default:
-                                                updateLog("Add metadata '" + mappingField.getMets() + "' with value '" + mappingField.getColumn()
-                                                        + "'");
+                                            case "node":
                                                 Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
                                                 md.setValue(cellContent);
                                                 ds.addMetadata(md);
                                                 break;
+                                                
+                                            default:
+                                                successful=false;
+                                                updateLogAndProcess(process.getId(),"the specified type: "+mappingField.getType() +" is not supported",3);
                                         }
-                                    } else {
-                                        updateLog("Add metadata '" + mappingField.getMets() + "' with value '" + mappingField.getColumn() + "'");
-                                        Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
-                                        md.setValue(cellContent);
-                                        ds.addMetadata(md);
-                                    }
-                                    logical.addChild(ds);
+                                        logical.addChild(ds);
+                                    }            
                                 }
                             }
                         }
@@ -376,34 +379,35 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         // add some properties
                         bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
                         bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
-                        ProcessManager.saveProcess(process);
+                        
 
                         // write the metsfile
                         process.writeMetadataFile(fileformat);
 
-                        // if media files are given, import these into the media folder of the process
-                        updateLog("Start copying media files");
-                        String targetBase = process.getImagesOrigDirectory(false);
-                        File pdf = new File(importSet.metadataFolder, "file.pdf");
-                        if (pdf.canRead()) {
-                            storageProvider.createDirectories(Paths.get(targetBase));
-                            storageProvider.copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.pdf"));
-                        }
-
-                        // start any open automatic tasks for the created process
-                        for (Step s : process.getSchritteList()) {
-                            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
-                                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
-                                myThread.startOrPutToQueue();
+                        if (successful) {
+                            // start any open automatic tasks for the created process
+                            for (Step s : process.getSchritteList()) {
+                                if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+                                    ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                                    myThread.startOrPutToQueue();
+                                }
+                            }
+                            //move parsed xls to processed folder
+                            storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
+                            updateLog("Process successfully created with ID: " + process.getId());
+                        } else {
+                            updateLogAndProcess(process.getId(),"Process created with ID: " + process.getId(),3);
+                            for (Step s : process.getSchritteList()) {
+                                if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
+                                    s.setBearbeitungsstatusEnum(StepStatus.ERROR);
+                                    break;
+                                }
                             }
                         }
-                        //move parsed xls to processed folder
-                        storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
-
-                        updateLog("Process successfully created with ID: " + process.getId());
+                        ProcessManager.saveProcess(process);
 
                     } catch (Exception e) {
-                        //Shouldn't we end the export here??
+                        //Shouldn't we end the import here??
                         log.error("Error while creating a process during the import", e);
                         updateLog("Error while creating a process during the import: " + e.getMessage(), 3);
                         Helper.setFehlerMeldung("Error while creating a process during the import : " + e.getMessage());
