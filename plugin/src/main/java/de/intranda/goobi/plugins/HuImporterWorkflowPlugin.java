@@ -3,11 +3,13 @@ package de.intranda.goobi.plugins;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
@@ -25,6 +27,7 @@ import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
+import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.plugin.interfaces.IPushPlugin;
 import org.goobi.production.plugin.interfaces.IWorkflowPlugin;
@@ -260,6 +263,25 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         Fileformat fileformat = new MetsMods(prefs);
                         DigitalDocument dd = new DigitalDocument();
                         fileformat.setDigitalDocument(dd);
+                        List<File> imageFiles = new ArrayList<File>();
+                        if (importSet.getMediaFolder() != null) {
+                            File mediaFolder = new File(importSet.getMediaFolder());
+                            if (mediaFolder.isDirectory()) {
+                                imageFiles = Arrays.asList(mediaFolder.listFiles(new FilenameFilter() {
+
+                                    @Override
+                                    public boolean accept(File dir, String name) {
+                                        return name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff")
+                                                || name.toLowerCase().endsWith(".jpg") || name.toLowerCase().endsWith(".jpeg")
+                                                || name.toLowerCase().endsWith(".jp2") || name.toLowerCase().endsWith(".png");
+                                    }
+                                }));
+                            }
+                        } else {
+                            // check if this is desired behaviour!
+                            updateLog("No mediaFolder specified! Import aborted!", 3);
+                            return;
+                        }
 
                         // add the physical basics
                         DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
@@ -267,12 +289,21 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                         DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
                         dd.setLogicalDocStruct(logical);
-
                         MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
 
                         // save the process
                         Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
 
+                        //reread fileformat etc. from process
+                        fileformat = process.readMetadataFile();
+                        dd = fileformat.getDigitalDocument();
+                        logical = dd.getLogicalDocStruct();
+                        physical = dd.getPhysicalDocStruct();
+
+                        String imagesTifDirectory = process.getImagesTifDirectory(false);
+
+                        //Initialize PageCount
+                        int PageCount = 0;
                         for (Row row : sheet) {
                             //skip rows until start row
                             if (row.getRowNum() < importSet.getRowStart() - 1)
@@ -283,9 +314,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             //create new Docstruct of 
                             DocStruct ds = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getStructureType()));
 
-                            // Save media file, if defined
-                            //TODO copy Media at once or one by one?
-                            String media = null;
                             // create the metadata fields by reading the config (and get content from the content files of course)
                             for (MappingField mappingField : mappingFields) {
                                 // treat persons different than regular metadata
@@ -304,25 +332,28 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                 ds.addPerson(p);
                                                 break;
                                             case "media":
-                                                //erzeuge Liste mit Dateinamen
-                                                String imagesTifDirectory =  process.getImagesTifDirectory(false);
-                                                List<Path> ImageFilePaths = getImageFiles(cellContent.split(","), importSet.getMediaFolder());
-                                                //copy image
-                                                physical.getAllMetadataByType(MDTypeForPath);
-                                                List<? extends Metadata> filepath = physical.getAllMetadataByType(MDTypeForPath);
-                                                Metadata mdForPath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
-                                                physical.addMetadata(mdForPath);
-                                                if (filepath == null || filepath.isEmpty()) {
-                                                    mdForPath = new Metadata(MDTypeForPath);
-                                                    physical.addMetadata(mdForPath);
-                                                } else {
-                                                    //why
-                                                    mdForPath = filepath.get(0);
+
+                                                String[] imageFileNames = cellContent.split(",");
+                                                for (String imageFileName : imageFileNames) {
+                                                    File imageFile = imageFiles.stream()
+                                                            .filter(file -> file.getName().equals(imageFileName.trim()))
+                                                            .findFirst()
+                                                            .orElse(null);
+                                                    if (imageFile == null) {
+                                                        updateLogAndProcess(process.getId(), "Couldn't find file with the name: " + imageFileName
+                                                                + " in media folder: " + importSet.getMediaFolder(), 3);
+                                                    } else {
+                                                        if (imageFile.canRead()) {
+                                                            addPage(physical, ds, dd, imageFile, ++PageCount);
+                                                            storageProvider.copyFile(imageFile.toPath(),
+                                                                    Paths.get(process.getImagesOrigDirectory(true), imageFile.getName()));
+                                                        } else {
+                                                            updateLogAndProcess(process.getId(),"Couldn't read file with the name: " + imageFileName + " in media folder: "
+                                                                    + importSet.getMediaFolder(), 3);
+                                                        }
+                                                    }
                                                 }
-                                                mdForPath.setValue("file://" +imagesTifDirectory);
-                                                for (Path imageFilePath : ImageFilePaths) {
-                                                   // addPage(pysical, log, dd, file, pageNo);
-                                                }
+                                                break;
                                             default:
                                                 updateLog("Add metadata '" + mappingField.getMets() + "' with value '" + mappingField.getColumn()
                                                         + "'");
@@ -337,19 +368,18 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         md.setValue(cellContent);
                                         ds.addMetadata(md);
                                     }
-                                    updateLog("TEST: " + cellContent + " " + mappingField.getMets());
                                     logical.addChild(ds);
                                 }
                             }
                         }
 
-                        // write the metsfile
-                        process.writeMetadataAsTemplateFile(fileformat);
-
                         // add some properties
                         bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
                         bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
                         ProcessManager.saveProcess(process);
+
+                        // write the metsfile
+                        process.writeMetadataFile(fileformat);
 
                         // if media files are given, import these into the media folder of the process
                         updateLog("Start copying media files");
@@ -367,9 +397,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 myThread.startOrPutToQueue();
                             }
                         }
-                        //move parsed xls to processd folder
-                        //TODO reactivate
-                        //storageProvider.move(processFile, Paths.get(processedFolder.toString(),processFile.getFileName().toString()));
+                        //move parsed xls to processed folder
+                        storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
 
                         updateLog("Process successfully created with ID: " + process.getId());
 
@@ -400,17 +429,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         };
         new Thread(runnable).start();
 
-    }
-
-    private List<Path> getImageFiles(String[] fileNames, String mediaFolder) {
-        List<Path> paths = new ArrayList<Path>();
-        for (String fileName : fileNames) {
-            Path path = Paths.get(mediaFolder, fileName);
-            if (StorageProvider.getInstance().isFileExists(path))
-                ;
-            paths.add(path);
-        }
-        return paths;
     }
 
     private void addPage(DocStruct physicaldocstruct, DocStruct logical, DigitalDocument dd, File imageFile, int pageNo)
@@ -463,15 +481,26 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (int i = 0; i < cells.length; i++) {
             String readCell = getCellContentSplit(row, cells[i]);
             if (StringUtils.isNotBlank(readCell)) {
-                result.append(getCellContentSplit(row, cells[i]));
-                if (StringUtils.isNotBlank(imf.getSeparator()) && i + 1 < cells.length) {
-                    if (imf.blankBeforeSeparator) {
-                        result.append(" ");
+                if (i == 0) {
+                    result.append(getCellContentSplit(row, cells[i]));
+                } else {
+                    //first add whitspace and/or separator
+                    if (StringUtils.isNotBlank(imf.getSeparator())) {
+                        if (imf.blankBeforeSeparator) {
+                            result.append(" ");
+                        }
+                        result.append(imf.getSeparator());
+                        if (imf.blankAfterSeparator) {
+                            result.append(" ");
+                        }
+                    } else {
+                        //in case someone wants to use whitespace as seperator
+                        if (imf.getSeparator().length() > 0)
+                            result.append(imf.getSeparator());
+
                     }
-                    result.append(imf.getSeparator());
-                    if (imf.blankAfterSeparator) {
-                        result.append(" ");
-                    }
+                    //add content of Cell 
+                    result.append(getCellContentSplit(row, cells[i]));
                 }
             }
         }
@@ -506,6 +535,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     private void updateLog(String logmessage) {
         updateLog(logmessage, 0);
+    }
+
+    private void updateLogAndProcess(int processId, String message, int level) {
+        Helper.addMessageToProcessLog(processId, LogType.INFO, message);
+        updateLog(message, level);
     }
 
     /**

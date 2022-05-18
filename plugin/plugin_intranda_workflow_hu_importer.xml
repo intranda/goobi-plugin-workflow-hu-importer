@@ -1,6 +1,6 @@
 <config_plugin>
 	
-	<!-- import set for excel files
+	<!-- 	import set for excel files
 		name: name of the export set, which will be displayed in the dropdonwnmenu
 		metadataFolder: where are the documents located
 		mediaFolder: where are the media files located
@@ -9,19 +9,27 @@
 		mappingSet: the mapping that shall be used by the import set
 		publicationType: the publicationType that shall be used i.e. Monograph,...
         -->
+        
 	<importSet name="TestImportSet" 
-		metadataFolder="" 
-		mediaFolder ="/foo/bar/efolder" 
-		workflow="Sample_Workflow" 
+		metadataFolder="/opt/digiverso/import/sample/" 
+		mediaFolder ="/opt/digiverso/import/images/" 
+		workflow="Sample_Workflow"
 		project="Archive_Project" 
 		mappingSet="Monograph" 
-		publicationType="Monograph"/>
-	
+		publicationType="Monograph"
+		structureType="Chapter"
+		useFileNameAsProcessTitle="true"
+		/>
+		
 	<mappingSet name="Monograph">
-		<field column="B" label="Jahr" type="node"/>
-		<field column="A" label="Monat" type="node"/>
-		<field column="C" label="Titel" mets="TitleDocMain" />
+		<field column="D" label="Inventar-Nr./Signatur" type="node" mets="TitleDocMainShort"/>
+		<field column="M,N" label="Datei recto" type="default" mets="TitleDocMainShort"/>
+		<field column="M,N" label="Datei recto" type="media" mets="TitleDocMainShort"/>
+		<field column="J" label="Maße" type="node" mets="TitleDocMainShort"/>
+		<field column="O" label="Author" type="person" mets="Author"/>
+		<!--field column="C" label="Titel" mets="ISBN" />
 		<field column="D" label="Signatur(en)" mets="shelfmarksource"/>
+		<field column="Max Mustermann" title="E"  label="Name" mets="Author" person="true"/-->
 	</mappingSet>
 	
 </config_plugin>
