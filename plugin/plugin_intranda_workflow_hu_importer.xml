@@ -18,15 +18,22 @@
 		mappingSet="Monograph" 
 		publicationType="Monograph"
 		structureType="Chapter"
-		useFileNameAsProcessTitle="true"
+		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		descriptionMappingSet="Description"
 		/>
-		
+	
 	<mappingSet name="Monograph">
 		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="TitleDocMainShort"/>
 		<field column="M,N" label="Datei recto" type="metadata" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="media" mets="TitleDocMainShort"/>
-		<field column="J" label="Maße" type="node" mets="TitleDocMainShort"/>
+		<field column="M,N" label="Datei recto" type="media"/>
+		<field column="J" label="Maße" type="metadata" mets="TitleDocMainShort"/>
 		<field column="O" label="Author" type="person" mets="Author"/>
+	</mappingSet>
+	
+	<mappingSet name="Description">
+		<field column="A" label="Dateiname" type="FileName" />
+		<field column="B" label="Titel" type="metadata" mets="TitleDocMain"/>
+		<field column="C" label="Autor" type="person" mets="Author"/>
 	</mappingSet>
 	
 </config_plugin>

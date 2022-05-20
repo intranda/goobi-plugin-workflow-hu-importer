@@ -71,7 +71,8 @@ import ugh.fileformats.mets.MetsMods;
 @PluginImplementation
 @Log4j2
 public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
-
+    @Getter
+    private ArrayList<LogMessage> errorList;
     private BeanHelper bhelp;
     @Getter
     private String title = "intranda_workflow_hu_importer";
@@ -142,9 +143,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String structureType = node.getString("[@structureType]", null);
             int rowStart = node.getInt("[@rowStart]", 2);
             int rowEnd = node.getInt("[@rowEnd]", 0);
+            String importSetDescription = node.getString("[@importSetDescription]", null);
+            String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
             boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
             importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType, rowStart,
-                    rowEnd, useFileNameAsProcessTitle));
+                    rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet));
         }
 
         // write a log into the UI
@@ -197,9 +200,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // save the process
 
             // add TitleDocMain
-            Metadata title = new Metadata(prefs.getMetadataTypeByName("TitleDocMain"));
-            title.setValue(filename);
-            logical.addMetadata(title);
+            //Metadata title = new Metadata(prefs.getMetadataTypeByName("TitleDocMain"));
+            //title.setValue(filename);
+            //logical.addMetadata(title);
             Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
 
             // add some properties
@@ -216,38 +219,25 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             }
             return process;
 
-        } catch (MetadataTypeNotAllowedException | PreferencesException | TypeNotAllowedForParentException ex) {
+        } catch ( PreferencesException | TypeNotAllowedForParentException ex) {
             throw new ProcessCreationException(ex);
         }
     }
 
-    /**
-     * main method to start the actual import
-     * 
-     * @param importConfiguration
-     */
-    public void startImport(ImportSet importSet) {
-        failedImports = new ArrayList<String>();
-        StorageProviderInterface storageProvider = StorageProvider.getInstance();
-        updateLog("Start import for: " + importSet.getName());
-        progress = 0;
-        bhelp = new BeanHelper();
-
+    private List<MappingField> getMapping(String mappingName) {
         // find the correct mapping node
         mappingNode = null;
         for (HierarchicalConfiguration node : config.configurationsAt("mappingSet")) {
             String name = node.getString("[@name]");
-            if (name.equals(importSet.getMapping())) {
-                log.debug("Configured mapping was found: " + name);
+            if (name.equals(mappingName)) {
+                //log.debug("Configured mapping was found: " + name);
                 mappingNode = node;
                 break;
             }
         }
         // if mapping node was not found, send back error message
         if (mappingNode == null) {
-            updateLog("Import could not be executed as no configuration node was found for " + importSet + importSet.getName() + " with mapping "
-                    + importSet.getMapping(), 3);
-            return;
+            return null;
         }
 
         // create a list of all fields to import
@@ -264,13 +254,93 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String separator = field.getString("[@separator]", ",");
                 boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
-                mappingFields.add(new MappingField(column, label, mets, metsGroup, ead, type, separator, blankBeforeSeparator, blankAfterSeparator));
-
+                mappingFields.add(new MappingField(column, label, mets, metsGroup, ead, type, separator, blankBeforeSeparator, blankAfterSeparator)); 
             }
+            return mappingFields;
         } catch (NullPointerException ex) {
             String message = "Invalid MappingSet configuration. Mandatory parameter missing! Please correct the configuration file! Import aborted!";
             log.error(message, ex);
             updateLog(message, 3);
+
+        }
+        return null;
+    }
+
+    private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
+        Row processDescriptionRow = null;
+        if (importSet.getImportSetDescription() != null) {
+            List<MappingField> processDescription = getMapping(importSet.getDescriptionMappingSet());
+            MappingField fileNameColumn = null;
+            if (processDescription == null) {
+                updateLog("No ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet() + " was found!", 3);
+                failedImports.add(processFile.getFileName().toString());
+                return null;
+            }
+            for (MappingField field : processDescription) {
+                if (field.getType().equals("FileName")) {
+                    fileNameColumn = field;
+                    break;
+                }
+            }
+            if (fileNameColumn != null) {
+
+                FileInputStream inputStream;
+                try {
+                    inputStream = new FileInputStream(new File(importSet.getImportSetDescription()));
+                    Workbook workbook = new XSSFWorkbook(inputStream);
+
+                    Sheet sheet = workbook.getSheetAt(0);
+
+                    for (Row row : sheet) {
+                        if (row.getRowNum() == 0) {
+                            continue;
+                            //skip header
+                        }
+                        if (getCellContent(row, fileNameColumn).equals(processFile.getFileName().toString())) {
+                            processDescriptionRow = row;
+                        }
+                    }
+                    if (processDescriptionRow == null) {
+                        updateLog("A File with Processdescriptions was specified but the Filename(" + processFile.getFileName().toString()
+                                + "was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
+                        updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
+                        failedImports.add(processFile.getFileName().toString());
+                        return null;
+                    }
+                    //
+                    return new ProcessDescription(processDescriptionRow, processDescription);
+                } catch (IOException e) {
+                    updateLog("Could open File with Path"+importSet.getImportSetDescription(), 3);
+                }
+            } else {
+                updateLog("A File with Processdescriptions was specified but no DescriptionMappingSet was provided!", 3);
+                updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
+                failedImports.add(processFile.getFileName().toString());
+                return null;
+            }
+        }
+        return null;
+
+    }
+
+    /**
+     * main method to start the actual import
+     * 
+     * @param importConfiguration
+     */
+    public void startImport(ImportSet importSet) {
+        errorList = new ArrayList<LogMessage>();
+        failedImports = new ArrayList<String>();
+        StorageProviderInterface storageProvider = StorageProvider.getInstance();
+        updateLog("Start import for: " + importSet.getName());
+        progress = 0;
+        bhelp = new BeanHelper();
+
+        //read mappings
+
+        List<MappingField> mappingFields = getMapping(importSet.getMapping());
+        if (mappingFields == null || mappingFields.size() == 0) {
+            updateLog("Import could not be executed because no MappingSet with the name " + importSet.getMapping() + "  was found!", 3);
             return;
         }
 
@@ -284,21 +354,31 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 return;
             }
         }
+
         // run the import in a separate thread to allow a dynamic progress bar
         run = true;
         Runnable runnable = () -> {
 
-            // read input file
-
+            // create list with files in metadata folder of importSet
             List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), Files::isRegularFile);
-
             updateLog("Run through all import files");
             itemsTotal = FilesToRead.size();
             itemCurrent = 0;
             Process process = null;
             try {
+                boolean successful = true;
+                if (FilesToRead.size() == 0) {
+                    updateLog("There are no files int the folder: " + importSet.getMetadataFolder(), 3);
+                    successful = false;
+                }
                 for (Path processFile : FilesToRead) {
-                    boolean successful = true;
+                    ProcessDescription processDescription = getProcessDescription(importSet, processFile);
+                    if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
+                        updateLog("A importSetDescription was configured but there were Errors getting the Description", 3);
+                        successful = false;
+                        continue;
+                    }
+
                     Thread.sleep(100);
                     if (!run) {
                         break;
@@ -318,7 +398,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             File mediaFolder = new File(importSet.getMediaFolder());
                             if (mediaFolder.isDirectory()) {
                                 imageFiles = Arrays.asList(mediaFolder.listFiles(new FilenameFilter() {
-
                                     @Override
                                     public boolean accept(File dir, String name) {
                                         return name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff")
@@ -330,14 +409,36 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         } else {
                             // check if this is desired behaviour!
                             updateLog("No mediaFolder specified! Import aborted!", 3);
-                            return;
+                            failedImports.add(processFile.getFileName().toString());
+                            continue;
                         }
                         //reread fileformat etc. from process
                         Fileformat fileformat = process.readMetadataFile();
                         DigitalDocument dd = fileformat.getDigitalDocument();
                         DocStruct logical = dd.getLogicalDocStruct();
                         DocStruct physical = dd.getPhysicalDocStruct();
-                        String imagesTifDirectory = process.getImagesTifDirectory(false);
+
+                        if (processDescription != null) {
+                            for (MappingField mapping : processDescription.getMapping()) {
+                                try {
+                                    String cellContent = getCellContent(processDescription.getRow(), mapping);
+                                    DocStruct ds = addMetadata(prefs, logical, mapping, importSet, cellContent, process);
+                                    if (ds!=null) {
+                                        logical = ds;
+                                    }else {
+                                        updateLog("Error adding Metadata to Topelement! ", 3);
+                                    }
+                                } catch (MetadataTypeNotAllowedException e) {
+                                    updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets "+ mapping.getMets() + " in MappingSet "
+                                            + importSet.getDescriptionMappingSet(), 3);
+                                }
+                            }
+                        }
+
+                        //add imagepath:
+                        Metadata imagePath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
+                        imagePath.setValue(process.getImagesDirectory());
+                        physical.addMetadata(imagePath);
 
                         //Initialize PageCount
                         int PageCount = 0;
@@ -373,11 +474,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                 if (!storageProvider.isFileExists(masterFolder))
                                                     storageProvider.createDirectories(masterFolder);
                                                 if (imageFile.canRead()) {
-                                                    if (!addPage(physical, ds, dd, imageFile, process.getId(), ++PageCount)){
-                                                        successful=false;
-                                                    }
                                                     storageProvider.copyFile(imageFile.toPath(),
                                                             Paths.get(masterFolder.toString(), imageFile.getName()));
+                                                    if (!addPage(physical, ds, dd, imageFile, process.getId(), ++PageCount)) {
+                                                        successful = false;
+                                                    }
+
                                                 } else {
                                                     updateLogAndProcess(process.getId(),
                                                             "Couldn't read the following file: " + importSet.getMediaFolder() + imageFileName, 3);
@@ -386,7 +488,13 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                             }
                                         }
                                     } else {
-                                        ds = addMetadata(prefs, ds, mappingField, importSet, cellContent, process);
+
+                                        try {
+                                            ds = addMetadata(prefs, ds, mappingField, importSet, cellContent, process);
+                                        } catch (MetadataTypeNotAllowedException e) {
+                                            updateLog("Invalid Mapping for Field " + mappingField.getType() + " in MappingSet "
+                                                    + importSet.getDescriptionMappingSet(), 3);
+                                        }
                                     }
                                 }
                                 if (ds != null) {
@@ -461,11 +569,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 run = false;
                 Thread.sleep(2000);
                 updateLog("Import completed.", 2);
-                Helper.setMeldung("Import completed");
-                if (failedImports.size()>0) {
-                    Helper.setFehlerMeldung("We encountered errors during the import. please check the logfile and the process logs!");
-                    updateLog(failedImports.size()+ " Import(s) finished with errors", 3);
-                    failedImports.forEach((importFile)-> {
+                pusher.send("summary");
+                if (failedImports.size() > 0) {
+                    updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
+                    updateLog(failedImports.size() + " Import(s) finished with errors!", 3);
+                    failedImports.forEach((importFile) -> {
                         updateLog(importFile, 3);
                     });
                 }
@@ -475,13 +583,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 log.error("Error trying to execute the import", e);
                 updateLog("Error trying to execute the import: " + e.getMessage(), 3);
             }
+            pusher.send("summary");
 
         };
         new Thread(runnable).start();
 
     }
 
-    private DocStruct addMetadata(Prefs prefs, DocStruct ds, MappingField mappingField, ImportSet importSet, String cellContent, Process process) throws MetadataTypeNotAllowedException {
+    private DocStruct addMetadata(Prefs prefs, DocStruct ds, MappingField mappingField, ImportSet importSet, String cellContent, Process process)
+            throws MetadataTypeNotAllowedException {
         switch (mappingField.getType()) {
             case "person":
                 if (mappingField.getMets() == null) {
@@ -505,7 +615,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 md.setValue(cellContent);
                 ds.addMetadata(md);
                 break;
-
+            case "FileName":
+                //do nothhing
+                return null;
             default:
                 updateLogAndProcess(process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
                 return null;
@@ -539,7 +651,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // image name
             ContentFile cf = new ContentFile();
 
-            cf.setLocation("file://" + imageFile.getAbsolutePath());
+            cf.setLocation("file://" + imageFile.getName());
 
             dsPage.addContentFile(cf);
             if (pageNo % 10 == 0) {
@@ -640,7 +752,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param logmessage
      */
     private void updateLog(String logmessage, int level) {
-        logQueue.add(new LogMessage(logmessage, level));
+        LogMessage message = new LogMessage(logmessage, level);
+        logQueue.add(message);
+        if (level == 3)
+            errorList.add(message);
         log.debug(logmessage);
         if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
             lastPush = System.currentTimeMillis();
@@ -685,6 +800,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private int rowStart;
         private int rowEnd;
         private boolean useFileNameAsProcessTitle;
+        private String importSetDescription;
+        private String DescriptionMappingSet;
     }
 
     @Data
@@ -692,5 +809,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public class LogMessage {
         private String message;
         private int level = 0;
+    }
+
+    @Data
+    @AllArgsConstructor
+    public class ProcessDescription {
+        private Row row;
+        private List<MappingField> mapping;
     }
 }
