@@ -2,7 +2,6 @@ package de.intranda.goobi.plugins;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,9 +9,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.commons.configuration.HierarchicalConfiguration;
@@ -37,6 +41,7 @@ import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
+import de.sub.goobi.helper.NIOFileUtils;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.StorageProviderInterface;
@@ -45,7 +50,6 @@ import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.ProjectManager;
-import de.sub.goobi.persistence.managers.StepManager;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -65,7 +69,6 @@ import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
 import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
-import ugh.exceptions.UGHException;
 import ugh.fileformats.mets.MetsMods;
 
 @PluginImplementation
@@ -161,18 +164,24 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         run = false;
     }
 
-    public Process createProcess(Path processFile, ImportSet importSet) throws ProcessCreationException {
-        String filename = processFile.getFileName().toString();
-        if (filename.contains(".")) {
-            filename = filename.substring(0, filename.lastIndexOf("."));
-        }
-        String processname = UUID.randomUUID().toString();
+    public Process createProcess(ProcessDescription processDescription, ImportSet importSet) throws ProcessCreationException {
+        HashMap<String, String> processProperties = processDescription.getProcessProperties();
+        String processname = processProperties.get(ProcessProperties.PROCESSNAME.toString());
 
-        if (importSet.isUseFileNameAsProcessTitle()) {
-            processname = filename;
-        }
         String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
-        processname = filename.replaceAll(regex, "_").trim();
+
+        // if processname field was empty use filename UUID
+        if (StringUtils.isBlank(processname))
+            processname = UUID.randomUUID().toString();
+
+        // if UseAsProcessTitle is set use Filename as ProcessTitle
+        if (importSet.isUseFileNameAsProcessTitle()) {
+            String filename = processDescription.getFileName().toString();
+            if (filename.contains(".")) {
+                filename = filename.substring(0, filename.lastIndexOf("."));
+            }
+            processname = filename.replaceAll(regex, "_").trim();
+        }
         if (ProcessManager.countProcessTitle(processname, null) > 0) {
             int tempCounter = 1;
             String tempName = processname + "_" + tempCounter;
@@ -197,12 +206,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
             dd.setLogicalDocStruct(logical);
             MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
-            // save the process
 
-            // add TitleDocMain
-            //Metadata title = new Metadata(prefs.getMetadataTypeByName("TitleDocMain"));
-            //title.setValue(filename);
-            //logical.addMetadata(title);
+            // save the process
             Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
 
             // add some properties
@@ -219,7 +224,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             }
             return process;
 
-        } catch ( PreferencesException | TypeNotAllowedForParentException ex) {
+        } catch (PreferencesException | TypeNotAllowedForParentException ex) {
             throw new ProcessCreationException(ex);
         }
     }
@@ -248,13 +253,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String column = field.getString("[@column]", null);
                 String label = field.getString("[@label]", null);
                 String mets = field.getString("[@mets]", null);
-                String metsGroup = field.getString("[@metsGroup]", null);
-                String ead = field.getString("[@ead]");
                 String type = field.getString("[@type]", null);
                 String separator = field.getString("[@separator]", ",");
                 boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
-                mappingFields.add(new MappingField(column, label, mets, metsGroup, ead, type, separator, blankBeforeSeparator, blankAfterSeparator)); 
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator));
             }
             return mappingFields;
         } catch (NullPointerException ex) {
@@ -269,19 +272,37 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
         Row processDescriptionRow = null;
         if (importSet.getImportSetDescription() != null) {
-            List<MappingField> processDescription = getMapping(importSet.getDescriptionMappingSet());
+            List<MappingField> processMetadata = getMapping(importSet.getDescriptionMappingSet());
+            List<MappingField> processDescription = new ArrayList<MappingField>();
+            HashMap<String, String> processProperties = new HashMap<String, String>();
+
             MappingField fileNameColumn = null;
-            if (processDescription == null) {
-                updateLog("No ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet() + " was found!", 3);
+            if (processMetadata == null) {
+                updateLog("No valid ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet() + " was found!", 3);
                 failedImports.add(processFile.getFileName().toString());
                 return null;
             }
+
+            //filter processproperties from processMetadata
+            Iterator<MappingField> metaData = processMetadata.iterator();
+            while (metaData.hasNext()) {
+                MappingField field = metaData.next();
+                for (ProcessProperties typeName : ProcessProperties.values()) {
+                    if (field.getType().equals(typeName.toString())) {
+                        processDescription.add(field);
+                        metaData.remove();
+                    }
+                }
+            }
+
+            // get field that maps Column with FileName
             for (MappingField field : processDescription) {
                 if (field.getType().equals("FileName")) {
                     fileNameColumn = field;
                     break;
                 }
             }
+
             if (fileNameColumn != null) {
 
                 FileInputStream inputStream;
@@ -307,10 +328,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         failedImports.add(processFile.getFileName().toString());
                         return null;
                     }
+
+                    for (MappingField field : processDescription) {
+                        processProperties.put(field.getType(), getCellContent(processDescriptionRow, field));
+                    }
+
                     //
-                    return new ProcessDescription(processDescriptionRow, processDescription);
+                    return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
                 } catch (IOException e) {
-                    updateLog("Could open File with Path"+importSet.getImportSetDescription(), 3);
+                    updateLog("Could open File with Path" + importSet.getImportSetDescription(), 3);
                 }
             } else {
                 updateLog("A File with Processdescriptions was specified but no DescriptionMappingSet was provided!", 3);
@@ -320,6 +346,17 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             }
         }
         return null;
+
+    }
+
+    public static boolean isRegularAndNotHidden(Path path) {
+
+        try {
+            return !Files.isDirectory(path) && !Files.isHidden(path);
+        } catch (IOException e) {
+            //if we can't open it we will not add it to the List
+            return false;
+        }
 
     }
 
@@ -360,7 +397,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         Runnable runnable = () -> {
 
             // create list with files in metadata folder of importSet
-            List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), Files::isRegularFile);
+            List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
             updateLog("Run through all import files");
             itemsTotal = FilesToRead.size();
             itemCurrent = 0;
@@ -389,47 +426,42 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     Sheet sheet = workbook.getSheetAt(0);
 
                     try {
-
-                        // create Process
-                        process = createProcess(processFile, importSet);
-                        updateLog("Start importing: " + process.getTitel(), 1);
-                        List<File> imageFiles = new ArrayList<File>();
+                        
+                        Set<Path> imageFiles = null;
                         if (importSet.getMediaFolder() != null) {
-                            File mediaFolder = new File(importSet.getMediaFolder());
-                            if (mediaFolder.isDirectory()) {
-                                imageFiles = Arrays.asList(mediaFolder.listFiles(new FilenameFilter() {
-                                    @Override
-                                    public boolean accept(File dir, String name) {
-                                        return name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff")
-                                                || name.toLowerCase().endsWith(".jpg") || name.toLowerCase().endsWith(".jpeg")
-                                                || name.toLowerCase().endsWith(".jp2") || name.toLowerCase().endsWith(".png");
-                                    }
-                                }));
-                            }
+                            //TODO catch IOException here!
+                            imageFiles = filterImagesInFolder(importSet.getMediaFolder());
+
                         } else {
-                            // check if this is desired behaviour!
+                            // check if this is desired behavior!
                             updateLog("No mediaFolder specified! Import aborted!", 3);
                             failedImports.add(processFile.getFileName().toString());
                             continue;
                         }
-                        //reread fileformat etc. from process
+
+                        // create Process
+                        process = createProcess(processDescription, importSet);
+                        updateLog("Start importing: " + process.getTitel(), 1);
+                        
+
+                        //read fileformat etc. from process
                         Fileformat fileformat = process.readMetadataFile();
                         DigitalDocument dd = fileformat.getDigitalDocument();
                         DocStruct logical = dd.getLogicalDocStruct();
                         DocStruct physical = dd.getPhysicalDocStruct();
 
                         if (processDescription != null) {
-                            for (MappingField mapping : processDescription.getMapping()) {
+                            for (MappingField mapping : processDescription.getMetaDataMapping()) {
                                 try {
                                     String cellContent = getCellContent(processDescription.getRow(), mapping);
                                     DocStruct ds = addMetadata(prefs, logical, mapping, importSet, cellContent, process);
-                                    if (ds!=null) {
+                                    if (ds != null) {
                                         logical = ds;
-                                    }else {
+                                    } else {
                                         updateLog("Error adding Metadata to Topelement! ", 3);
                                     }
                                 } catch (MetadataTypeNotAllowedException e) {
-                                    updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets "+ mapping.getMets() + " in MappingSet "
+                                    updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets " + mapping.getMets() + " in MappingSet "
                                             + importSet.getDescriptionMappingSet(), 3);
                                 }
                             }
@@ -461,8 +493,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     if (mappingField.getType().trim().equals("media")) {
                                         String[] imageFileNames = cellContent.split(",");
                                         for (String imageFileName : imageFileNames) {
-                                            File imageFile = imageFiles.stream()
-                                                    .filter(file -> file.getName().equals(imageFileName.trim()))
+                                            Path imageFile = imageFiles.stream()
+                                                    .filter(path -> path.getFileName().toString().equals(imageFileName.trim()))
                                                     .findFirst()
                                                     .orElse(null);
                                             if (imageFile == null) {
@@ -473,10 +505,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                 Path masterFolder = Paths.get(process.getImagesOrigDirectory(false));
                                                 if (!storageProvider.isFileExists(masterFolder))
                                                     storageProvider.createDirectories(masterFolder);
-                                                if (imageFile.canRead()) {
-                                                    storageProvider.copyFile(imageFile.toPath(),
-                                                            Paths.get(masterFolder.toString(), imageFile.getName()));
-                                                    if (!addPage(physical, ds, dd, imageFile, process.getId(), ++PageCount)) {
+                                                if (Files.isReadable(imageFile)) {
+                                                    storageProvider.copyFile(imageFile,
+                                                            Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
+                                                    if (!addPage(physical, ds, dd, imageFile.toFile(), process.getId(), ++PageCount)) {
                                                         successful = false;
                                                     }
 
@@ -590,6 +622,16 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
     }
 
+    private Set<Path> filterImagesInFolder(String mediaFolder)throws IOException  {
+        try (Stream<Path> stream = Files.list(Paths.get(mediaFolder))) {
+            return  stream
+              .filter(file -> {
+                  return !Files.isDirectory(file) && NIOFileUtils.checkImageType(file.getFileName().toString());})
+              .collect(Collectors.toSet());
+        }
+        
+    }
+
     private DocStruct addMetadata(Prefs prefs, DocStruct ds, MappingField mappingField, ImportSet importSet, String cellContent, Process process)
             throws MetadataTypeNotAllowedException {
         switch (mappingField.getType()) {
@@ -617,7 +659,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 break;
             case "FileName":
                 //do nothhing
-                return null;
+                return ds;
             default:
                 updateLogAndProcess(process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
                 return null;
@@ -770,8 +812,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String column;
         private String label;
         private String mets;
-        private String metsGroup;
-        private String ead;
         @NonNull
         private String type;
         @NonNull
@@ -815,6 +855,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @AllArgsConstructor
     public class ProcessDescription {
         private Row row;
-        private List<MappingField> mapping;
+        private List<MappingField> metaDataMapping;
+        private HashMap<String, String> ProcessProperties;
+        private Path fileName;
     }
 }
