@@ -1,104 +1,293 @@
 package de.intranda.goobi.plugins;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.ss.usermodel.Row;
 import org.goobi.beans.Process;
 
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.ImportSet;
+import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.ProcessDescription;
 import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
+import de.sub.goobi.helper.StorageProvider;
+import de.sub.goobi.helper.StorageProviderInterface;
 import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.ProjectManager;
 import lombok.Getter;
+import ugh.dl.ContentFile;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
+import ugh.dl.DocStructType;
 import ugh.dl.Fileformat;
+import ugh.dl.Metadata;
 import ugh.dl.MetadataType;
+import ugh.dl.Person;
 import ugh.dl.Prefs;
+import ugh.exceptions.DocStructHasNoTypeException;
+import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
+import ugh.exceptions.ReadException;
+import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
+import ugh.exceptions.WriteException;
 import ugh.fileformats.mets.MetsMods;
 
 public class DocumentManager {
-    @Getter
-    private Process process;
-    @Getter
-    private Prefs prefs;
-    private HuImporterWorkflowPlugin plugin;
+	@Getter
+	private Process process;
+	@Getter
+	private Prefs prefs;
+	private HuImporterWorkflowPlugin plugin;
 
-    public DocumentManager(ProcessDescription processDescription, ImportSet importSet, HuImporterWorkflowPlugin plugin) throws ProcessCreationException {
-        this.plugin=plugin;
-        BeanHelper bhelp = new BeanHelper();
-        HashMap<String, String> processProperties = processDescription.getProcessProperties();
+	private Fileformat fileformat;
+	private DigitalDocument digitalDocument;
+	private DocStruct logical;
+	private DocStruct physical;
+	private ImportSet importSet;
+	private int PageCount=0;
+	private DocStruct structure;
 
-        String processname = null;
-        if (processProperties != null) {
-            processname = processProperties.get(ProcessProperties.PROCESSNAME.toString());
-        }
+	public DocumentManager(ProcessDescription processDescription, ImportSet importSet, HuImporterWorkflowPlugin plugin)
+			throws ProcessCreationException {
+		this.plugin = plugin;
+		this.importSet = importSet;
+		BeanHelper bhelp = new BeanHelper();
+		HashMap<String, String> processProperties = processDescription.getProcessProperties();
 
-        String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
+		String processname = null;
+		if (processProperties != null) {
+			processname = processProperties.get(ProcessProperties.PROCESSNAME.toString());
+		}
 
-        // if processname field was empty use filename UUID
-        if (StringUtils.isBlank(processname))
-            processname = UUID.randomUUID().toString();
+		String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
 
-        // if UseAsProcessTitle is set use Filename as ProcessTitle
-        if (importSet.isUseFileNameAsProcessTitle()) {
-            String filename = processDescription.getFileName().toString();
-            if (filename.contains(".")) {
-                filename = filename.substring(0, filename.lastIndexOf("."));
-            }
-            processname = filename.replaceAll(regex, "_").trim();
-        }
-        if (ProcessManager.countProcessTitle(processname, null) > 0) {
-            int tempCounter = 1;
-            String tempName = processname + "_" + tempCounter;
-            while (ProcessManager.countProcessTitle(tempName, null) > 0) {
-                tempCounter++;
-                tempName = processname + "_" + tempCounter;
-            }
-            processname = tempName;
-        }
-        try {
-            String workflow = importSet.getWorkflow();
-            Process template = ProcessManager.getProcessByExactTitle(workflow);
-            this.prefs = template.getRegelsatz().getPreferences();
-            Fileformat fileformat = new MetsMods(prefs);
-            DigitalDocument dd = new DigitalDocument();
-            fileformat.setDigitalDocument(dd);
+		// if processname field was empty use filename UUID
+		if (StringUtils.isBlank(processname))
+			processname = UUID.randomUUID().toString();
 
-            // add the physical basics
-            DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
-            dd.setPhysicalDocStruct(physical);
+		// if UseAsProcessTitle is set use Filename as ProcessTitle
+		if (importSet.isUseFileNameAsProcessTitle()) {
+			String filename = processDescription.getFileName().toString();
+			if (filename.contains(".")) {
+				filename = filename.substring(0, filename.lastIndexOf("."));
+			}
+			processname = filename.replaceAll(regex, "_").trim();
+		}
+		if (ProcessManager.countProcessTitle(processname, null) > 0) {
+			int tempCounter = 1;
+			String tempName = processname + "_" + tempCounter;
+			while (ProcessManager.countProcessTitle(tempName, null) > 0) {
+				tempCounter++;
+				tempName = processname + "_" + tempCounter;
+			}
+			processname = tempName;
+		}
+		try {
+			String workflow = importSet.getWorkflow();
+			Process template = ProcessManager.getProcessByExactTitle(workflow);
+			this.prefs = template.getRegelsatz().getPreferences();
+			Fileformat fileformat = new MetsMods(prefs);
+			DigitalDocument dd = new DigitalDocument();
+			fileformat.setDigitalDocument(dd);
 
-            DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
-            dd.setLogicalDocStruct(logical);
-            MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
+			// add the physical basics
+			DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
+			dd.setPhysicalDocStruct(physical);
 
-            // save the process
-            Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
+			DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
+			dd.setLogicalDocStruct(logical);
+			MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
 
-            // add some properties
-            bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
-            bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
+			// save the process
+			Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
 
-            String projectName = importSet.getProject();
-            if (!StringUtils.isBlank(projectName)) {
-                try {
-                    ProjectManager.getProjectByName(projectName);
-                } catch (DAOException e) {
-                    plugin.updateLog("A Project with the name: " + projectName + " does not exist. Please update the configuration or create the Project.",3);
+			// add some properties
+			bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
+			bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
+
+			String projectName = importSet.getProject();
+			if (!StringUtils.isBlank(projectName)) {
+				try {
+					ProjectManager.getProjectByName(projectName);
+				} catch (DAOException e) {
+					plugin.updateLog("A Project with the name: " + projectName
+							+ " does not exist. Please update the configuration or create the Project.", 3);
+				}
+			}
+			this.process = process;
+			// read fileformat etc. from process
+			this.fileformat = process.readMetadataFile();
+			this.digitalDocument = fileformat.getDigitalDocument();
+			this.logical = digitalDocument.getLogicalDocStruct();
+			this.physical = digitalDocument.getPhysicalDocStruct();
+
+			// add imagepath:
+			Metadata imagePath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
+			imagePath.setValue(process.getImagesDirectory());
+			this.physical.addMetadata(imagePath);
+
+		} catch (PreferencesException | TypeNotAllowedForParentException | ReadException | WriteException | IOException
+				| InterruptedException | SwapException | DAOException | MetadataTypeNotAllowedException
+				| DocStructHasNoTypeException ex) {
+			throw new ProcessCreationException(ex);
+		}
+	}
+	
+	public void addMetaDataToTopStruct(MappingField mappingField, String cellContent) throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+		addMetadata(logical, mappingField, cellContent);
+	}
+	public void addDocStructWithMetaData(MappingField mappingField, String cellContent) throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+		
+		addMetadata(structure, mappingField, cellContent);
+	}
+	
+	public void createStructure() throws TypeNotAllowedForParentException {
+		structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(importSet.getStructureType()));
+	}
+	
+	public void savesStructure() throws TypeNotAllowedAsChildException {
+		logical.addChild(structure);
+	} 
+	
+	public void saveProcess() throws DAOException {
+		ProcessManager.saveProcess(process);
+	}
+	  /**
+     * Adds metadata to the DocStruct Element
+     * 
+     * @param prefs
+     * @param ds
+     * @param mappingField
+     * @param importSet
+     * @param cellContent
+     * @param process
+     * @return
+     * @throws MetadataTypeNotAllowedException
+	 * @throws TypeNotAllowedAsChildException 
+     */
+    public void addMetadata(DocStruct ds, MappingField mappingField,String cellContent)
+            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+        switch (mappingField.getType()) {
+            case "person":
+                if (mappingField.getMets() == null) {
+                    plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
+                    return;
                 }
-            }
-            this.process = process;
-
-        } catch (PreferencesException | TypeNotAllowedForParentException ex) {
-            throw new ProcessCreationException(ex);
+                plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
+                Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
+                String firstname = cellContent.substring(0, cellContent.indexOf(" "));
+                String lastname = cellContent.substring(cellContent.indexOf(" "));
+                p.setFirstname(firstname);
+                p.setLastname(lastname);
+                ds.addPerson(p);
+                break;
+            case "metadata":
+                if (mappingField.getMets() == null) {
+                    plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
+                    return;
+                }
+                Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
+                md.setValue(cellContent);
+                ds.addMetadata(md);
+                break;
+            case "FileName":
+                //do nothhing
+            default:
+                plugin.updateLogAndProcess(process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
+                return;
         }
+    }
+
+	public void addMediaFile(String cellContent, Set<Path> imageFiles) throws IOException, InterruptedException, SwapException, DAOException, TypeNotAllowedForParentException, TypeNotAllowedAsChildException  {
+		StorageProviderInterface storageProvider = StorageProvider.getInstance();
+		String[] imageFileNames = cellContent.split(",");
+		for (String imageFileName : imageFileNames) {
+			Path imageFile = imageFiles.stream()
+					.filter(path -> path.getFileName().toString().equals(imageFileName.trim())).findFirst()
+					.orElse(null);
+			if (imageFile == null) {
+				plugin.updateLogAndProcess(process.getId(),
+						"Couldn't find the following file: " + importSet.getMediaFolder() + imageFileName, 3);
+			} else {
+				Path masterFolder = Paths.get(process.getImagesOrigDirectory(false));
+				if (!storageProvider.isFileExists(masterFolder))
+					storageProvider.createDirectories(masterFolder);
+				if (Files.isReadable(imageFile)) {
+					storageProvider.copyFile(imageFile,
+							Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
+					if (!addPage(structure, imageFile.toFile())) {
+						plugin.updateLogAndProcess(process.getId(), "Couldn't add Page to Structure", 3);
+					}
+
+				} else {
+					plugin.updateLogAndProcess(process.getId(),
+							"Couldn't read the following file: " + importSet.getMediaFolder() + imageFileName, 3);
+				}
+			}
+		}
+	}
+	
+	  /**
+     * adds page to the physical docstruct and links it to the logical docstruct-element
+     * 
+     * @param ds
+     * @param dd
+     * @param imageFile
+     * @return true if successful
+     */
+    private boolean addPage(DocStruct ds, File imageFile) {
+        try {
+            DocStructType newPage = prefs.getDocStrctTypeByName("page");
+            DocStruct dsPage = digitalDocument.createDocStruct(newPage);
+            PageCount++;
+            // physical page no
+            physical.addChild(dsPage);
+            MetadataType mdt = prefs.getMetadataTypeByName("physPageNumber");
+            Metadata mdTemp = new Metadata(mdt);
+            mdTemp.setValue(String.valueOf(PageCount));
+            dsPage.addMetadata(mdTemp);
+
+            // logical page no
+            mdt = prefs.getMetadataTypeByName("logicalPageNumber");
+            mdTemp = new Metadata(mdt);
+
+            mdTemp.setValue("uncounted");
+
+            dsPage.addMetadata(mdTemp);
+            ds.addReferenceTo(dsPage, "logical_physical");
+
+            // image name
+            ContentFile cf = new ContentFile();
+
+            cf.setLocation("file://" + imageFile.getName());
+
+            dsPage.addContentFile(cf);
+            if (PageCount % 10 == 0) {
+                plugin.updateLog("Created " + PageCount + "physical Pages for Process with Id: " + process.getId());
+            }
+            return true;
+        } catch (TypeNotAllowedAsChildException |TypeNotAllowedForParentException e) {
+            plugin.updateLogAndProcess(1, "Error creating page - type not allowed as child/for parent", 3);
+            return false;
+        } catch (MetadataTypeNotAllowedException e) {
+            plugin.updateLogAndProcess(1, "Error creating page - Metadata type not allowed", 3);
+            return false;
+        }
+    }
+    
+    public void writeMetadataFile() throws WriteException, PreferencesException, IOException, InterruptedException, SwapException, DAOException {
+    	process.writeMetadataFile(fileformat);
     }
 
 }
