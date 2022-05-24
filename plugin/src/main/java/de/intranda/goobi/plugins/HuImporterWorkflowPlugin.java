@@ -2,19 +2,16 @@ package de.intranda.goobi.plugins;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -22,13 +19,8 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.util.CellReference;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.LogType;
@@ -38,7 +30,6 @@ import org.goobi.production.plugin.interfaces.IWorkflowPlugin;
 import org.omnifaces.cdi.PushContext;
 
 import de.sub.goobi.config.ConfigPlugins;
-import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.NIOFileUtils;
@@ -49,7 +40,6 @@ import de.sub.goobi.helper.enums.StepStatus;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
-import de.sub.goobi.persistence.managers.ProjectManager;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -66,10 +56,8 @@ import ugh.dl.MetadataType;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
 import ugh.exceptions.MetadataTypeNotAllowedException;
-import ugh.exceptions.PreferencesException;
 import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
-import ugh.fileformats.mets.MetsMods;
 
 @PluginImplementation
 @Log4j2
@@ -164,71 +152,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         run = false;
     }
 
-    public Process createProcess(ProcessDescription processDescription, ImportSet importSet) throws ProcessCreationException {
-        HashMap<String, String> processProperties = processDescription.getProcessProperties();
-        String processname = processProperties.get(ProcessProperties.PROCESSNAME.toString());
-
-        String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
-
-        // if processname field was empty use filename UUID
-        if (StringUtils.isBlank(processname))
-            processname = UUID.randomUUID().toString();
-
-        // if UseAsProcessTitle is set use Filename as ProcessTitle
-        if (importSet.isUseFileNameAsProcessTitle()) {
-            String filename = processDescription.getFileName().toString();
-            if (filename.contains(".")) {
-                filename = filename.substring(0, filename.lastIndexOf("."));
-            }
-            processname = filename.replaceAll(regex, "_").trim();
-        }
-        if (ProcessManager.countProcessTitle(processname, null) > 0) {
-            int tempCounter = 1;
-            String tempName = processname + "_" + tempCounter;
-            while (ProcessManager.countProcessTitle(tempName, null) > 0) {
-                tempCounter++;
-                tempName = processname + "_" + tempCounter;
-            }
-            processname = tempName;
-        }
-        try {
-            String workflow = importSet.getWorkflow();
-            Process template = ProcessManager.getProcessByExactTitle(workflow);
-            prefs = template.getRegelsatz().getPreferences();
-            Fileformat fileformat = new MetsMods(prefs);
-            DigitalDocument dd = new DigitalDocument();
-            fileformat.setDigitalDocument(dd);
-
-            // add the physical basics
-            DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
-            dd.setPhysicalDocStruct(physical);
-
-            DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
-            dd.setLogicalDocStruct(logical);
-            MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
-
-            // save the process
-            Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
-
-            // add some properties
-            bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
-            bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
-
-            String projectName = importSet.getProject();
-            if (!StringUtils.isBlank(projectName)) {
-                try {
-                    ProjectManager.getProjectByName(projectName);
-                } catch (DAOException e) {
-                    updateLog("A Project with the name: " + projectName + " does not exist. Please update the configuration or create the Project.");
-                }
-            }
-            return process;
-
-        } catch (PreferencesException | TypeNotAllowedForParentException ex) {
-            throw new ProcessCreationException(ex);
-        }
-    }
-
+    /**
+     * reads List with MappingFields from the configuration for a given Mapping
+     * 
+     * @param mappingName
+     * @return
+     */
     private List<MappingField> getMapping(String mappingName) {
         // find the correct mapping node
         mappingNode = null;
@@ -269,6 +198,13 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return null;
     }
 
+    /**
+     * reads the importset and the xls file with the processdescription if it finds a des
+     * 
+     * @param importSet
+     * @param processFile
+     * @return
+     */
     private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
         Row processDescriptionRow = null;
         if (importSet.getImportSetDescription() != null) {
@@ -304,20 +240,16 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             }
 
             if (fileNameColumn != null) {
-
-                FileInputStream inputStream;
                 try {
-                    inputStream = new FileInputStream(new File(importSet.getImportSetDescription()));
-                    Workbook workbook = new XSSFWorkbook(inputStream);
-
-                    Sheet sheet = workbook.getSheetAt(0);
+                    XlsReader reader = new XlsReader(importSet.getImportSetDescription());
+                    Sheet sheet = reader.getSheet();
 
                     for (Row row : sheet) {
                         if (row.getRowNum() == 0) {
                             continue;
                             //skip header
                         }
-                        if (getCellContent(row, fileNameColumn).equals(processFile.getFileName().toString())) {
+                        if (XlsReader.getCellContent(row, fileNameColumn).equals(processFile.getFileName().toString())) {
                             processDescriptionRow = row;
                         }
                     }
@@ -330,7 +262,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     }
 
                     for (MappingField field : processDescription) {
-                        processProperties.put(field.getType(), getCellContent(processDescriptionRow, field));
+                        processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
                     }
 
                     //
@@ -345,18 +277,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 return null;
             }
         }
-        return null;
-
-    }
-
-    public static boolean isRegularAndNotHidden(Path path) {
-
-        try {
-            return !Files.isDirectory(path) && !Files.isHidden(path);
-        } catch (IOException e) {
-            //if we can't open it we will not add it to the List
-            return false;
-        }
+        return new ProcessDescription(null, null, null, processFile.getFileName());
 
     }
 
@@ -421,12 +342,17 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         break;
                     }
                     updateLog("Datei: " + processFile.toString());
+                    /*
                     FileInputStream inputStream = new FileInputStream(new File(processFile.toString()));
                     Workbook workbook = new XSSFWorkbook(inputStream);
                     Sheet sheet = workbook.getSheetAt(0);
+                    */
+
+                    XlsReader reader = new XlsReader(processFile.toString());
+                    Sheet sheet = reader.getSheet();
 
                     try {
-                        
+
                         Set<Path> imageFiles = null;
                         if (importSet.getMediaFolder() != null) {
                             //TODO catch IOException here!
@@ -440,9 +366,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         }
 
                         // create Process
-                        process = createProcess(processDescription, importSet);
+                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
+                        process = dManager.getProcess();
+                        this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
-                        
 
                         //read fileformat etc. from process
                         Fileformat fileformat = process.readMetadataFile();
@@ -450,10 +377,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         DocStruct logical = dd.getLogicalDocStruct();
                         DocStruct physical = dd.getPhysicalDocStruct();
 
-                        if (processDescription != null) {
+                        if (processDescription != null && processDescription.getMetaDataMapping() != null) {
                             for (MappingField mapping : processDescription.getMetaDataMapping()) {
                                 try {
-                                    String cellContent = getCellContent(processDescription.getRow(), mapping);
+                                    String cellContent = XlsReader.getCellContent(processDescription.getRow(), mapping);
                                     DocStruct ds = addMetadata(prefs, logical, mapping, importSet, cellContent, process);
                                     if (ds != null) {
                                         logical = ds;
@@ -461,6 +388,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         updateLog("Error adding Metadata to Topelement! ", 3);
                                     }
                                 } catch (MetadataTypeNotAllowedException e) {
+                                    successful = false;
                                     updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets " + mapping.getMets() + " in MappingSet "
                                             + importSet.getDescriptionMappingSet(), 3);
                                 }
@@ -487,7 +415,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // create the metadata fields by reading the config (and get content from the content files of course)
                             for (MappingField mappingField : mappingFields) {
 
-                                String cellContent = getCellContent(row, mappingField);
+                                String cellContent = XlsReader.getCellContent(row, mappingField);
 
                                 if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
                                     if (mappingField.getType().trim().equals("media")) {
@@ -509,6 +437,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                                     storageProvider.copyFile(imageFile,
                                                             Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
                                                     if (!addPage(physical, ds, dd, imageFile.toFile(), process.getId(), ++PageCount)) {
+                                                        updateLogAndProcess(process.getId(), "Couldn't add Page to Structure", 3);
                                                         successful = false;
                                                     }
 
@@ -524,8 +453,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         try {
                                             ds = addMetadata(prefs, ds, mappingField, importSet, cellContent, process);
                                         } catch (MetadataTypeNotAllowedException e) {
+                                            successful = false;
                                             updateLog("Invalid Mapping for Field " + mappingField.getType() + " in MappingSet "
-                                                    + importSet.getDescriptionMappingSet(), 3);
+                                                    + importSet.getMapping(), 3);
                                         }
                                     }
                                 }
@@ -569,8 +499,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         //Shouldn't we end the import here??
                         log.error("Error creating a process during the import", e);
                         updateLog("Error creating a process during the import: " + e.getMessage(), 3);
-                        Helper.setFehlerMeldung("Error while creating a process during the import : " + e.getMessage());
-                        pusher.send("error");
                     } catch (Exception e) {
 
                         String message = (process != null) ? "Error mapping and importing data during the import of process: "
@@ -587,8 +515,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 e1.printStackTrace();
                             }
                         }
-                        Helper.setFehlerMeldung("message");
-                        pusher.send("error");
                     }
 
                     // recalculate progress
@@ -599,9 +525,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                 // finally last push
                 run = false;
-                Thread.sleep(2000);
+                Thread.sleep(1000);
                 updateLog("Import completed.", 2);
-                pusher.send("summary");
                 if (failedImports.size() > 0) {
                     updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
                     updateLog(failedImports.size() + " Import(s) finished with errors!", 3);
@@ -615,23 +540,58 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 log.error("Error trying to execute the import", e);
                 updateLog("Error trying to execute the import: " + e.getMessage(), 3);
             }
-            pusher.send("summary");
 
+            pusher.send("summary");
         };
         new Thread(runnable).start();
 
     }
 
-    private Set<Path> filterImagesInFolder(String mediaFolder)throws IOException  {
-        try (Stream<Path> stream = Files.list(Paths.get(mediaFolder))) {
-            return  stream
-              .filter(file -> {
-                  return !Files.isDirectory(file) && NIOFileUtils.checkImageType(file.getFileName().toString());})
-              .collect(Collectors.toSet());
+    /**
+     * checks if the path isn't a directory and if it's not hidden
+     * 
+     * @param path
+     * @return
+     */
+    public static boolean isRegularAndNotHidden(Path path) {
+
+        try {
+            return !Files.isDirectory(path) && !Files.isHidden(path);
+        } catch (IOException e) {
+            //if we can't open it we will not add it to the List
+            return false;
         }
-        
+
     }
 
+    /**
+     * returns list with paths of images in the provided folder
+     * 
+     * @param mediaFolder
+     * @return
+     * @throws IOException
+     */
+    private Set<Path> filterImagesInFolder(String mediaFolder) throws IOException {
+        try (Stream<Path> stream = Files.list(Paths.get(mediaFolder))) {
+            return stream.filter(file -> {
+                return !Files.isDirectory(file) && NIOFileUtils.checkImageType(file.getFileName().toString());
+            }).collect(Collectors.toSet());
+        }
+
+    }
+
+    /**
+     * Adds metadata to the DocStruct Element
+     * 
+     * @param prefs
+     * @param ds
+     * @param mappingField
+     * @param importSet
+     * @param cellContent
+     * @param process
+     * @return
+     * @throws MetadataTypeNotAllowedException
+     */
     private DocStruct addMetadata(Prefs prefs, DocStruct ds, MappingField mappingField, ImportSet importSet, String cellContent, Process process)
             throws MetadataTypeNotAllowedException {
         switch (mappingField.getType()) {
@@ -667,6 +627,22 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return ds;
     }
 
+    /**
+     * adds page to the physical docstruct and links it to the logical docstruct-element
+     * 
+     * @param physicaldocstruct
+     * @param logical
+     * @param dd
+     * @param imageFile
+     * @param processId
+     * @param pageNo
+     * @return
+     * @throws TypeNotAllowedForParentException
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws SwapException
+     * @throws DAOException
+     */
     private boolean addPage(DocStruct physicaldocstruct, DocStruct logical, DigitalDocument dd, File imageFile, int processId, int pageNo)
             throws TypeNotAllowedForParentException, IOException, InterruptedException, SwapException, DAOException {
 
@@ -712,61 +688,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    /**
-     * Read content vom excel cell
-     * 
-     * @param row
-     * @param cellname
-     * @return
-     */
-    private String getCellContent(Row row, MappingField imf) {
-        String[] cells = imf.getColumn().split(",");
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < cells.length; i++) {
-            String readCell = getCellContentSplit(row, cells[i]);
-            if (StringUtils.isNotBlank(readCell)) {
-                if (i == 0) {
-                    result.append(getCellContentSplit(row, cells[i]));
-                } else {
-                    //first add whitspace and/or separator
-                    if (StringUtils.isNotBlank(imf.getSeparator())) {
-                        if (imf.blankBeforeSeparator) {
-                            result.append(" ");
-                        }
-                        result.append(imf.getSeparator());
-                        if (imf.blankAfterSeparator) {
-                            result.append(" ");
-                        }
-                    } else {
-                        //in case someone wants to use whitespace as seperator
-                        if (imf.getSeparator().length() > 0)
-                            result.append(imf.getSeparator());
-
-                    }
-                    //add content of Cell 
-                    result.append(getCellContentSplit(row, cells[i]));
-                }
-            }
-        }
-        return result.toString();
-    }
-
-    /**
-     * Read content from excel cell as String
-     * 
-     * @param row
-     * @param cellname
-     * @return
-     */
-    private String getCellContentSplit(Row row, String cellname) {
-        Cell cell = row.getCell(CellReference.convertColStringToIndex(cellname));
-        if (cell != null) {
-            DataFormatter dataFormatter = new DataFormatter();
-            return dataFormatter.formatCellValue(cell).trim();
-        }
-        return null;
-    }
-
     @Override
     public void setPushContext(PushContext pusher) {
         this.pusher = pusher;
@@ -793,7 +714,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * 
      * @param logmessage
      */
-    private void updateLog(String logmessage, int level) {
+    public void updateLog(String logmessage, int level) {
         LogMessage message = new LogMessage(logmessage, level);
         logQueue.add(message);
         if (level == 3)
