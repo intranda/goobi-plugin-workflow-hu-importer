@@ -50,583 +50,542 @@ import ugh.exceptions.MetadataTypeNotAllowedException;
 @PluginImplementation
 @Log4j2
 public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
-	@Getter
-	private ArrayList<LogMessage> errorList;
-	private BeanHelper bhelp;
-	@Getter
-	private String title = "intranda_workflow_hu_importer";
-	private long lastPush = System.currentTimeMillis();
-	@Getter
-	private List<ImportSet> importSets;
-	private PushContext pusher;
-	private XMLConfiguration config = null;
-	private HierarchicalConfiguration mappingNode = null;
-	@Getter
-	private boolean run = false;
-	@Getter
-	private int progress = -1;
-	@Getter
-	private int itemCurrent = 0;
-	@Getter
-	int itemsTotal = 0;
-	@Getter
-	private Queue<LogMessage> logQueue = new CircularFifoQueue<LogMessage>(48);
-	private Prefs prefs;
-	private ArrayList<String> failedImports;
-	private boolean successful;
+    @Getter
+    private ArrayList<LogMessage> errorList;
+    private BeanHelper bhelp;
+    @Getter
+    private String title = "intranda_workflow_hu_importer";
+    private long lastPush = System.currentTimeMillis();
+    @Getter
+    private List<ImportSet> importSets;
+    private PushContext pusher;
+    private XMLConfiguration config = null;
+    private HierarchicalConfiguration mappingNode = null;
+    @Getter
+    private boolean run = false;
+    @Getter
+    private int progress = -1;
+    @Getter
+    private int itemCurrent = 0;
+    @Getter
+    int itemsTotal = 0;
+    @Getter
+    private Queue<LogMessage> logQueue = new CircularFifoQueue<LogMessage>(48);
+    private Prefs prefs;
+    private ArrayList<String> failedImports;
+    private boolean successful;
 
-	@Override
-	public PluginType getType() {
-		return PluginType.Workflow;
-	}
+    @Override
+    public PluginType getType() {
+        return PluginType.Workflow;
+    }
 
-	@Override
-	public String getGui() {
-		return "/uii/plugin_workflow_hu_importer.xhtml";
-	}
+    @Override
+    public String getGui() {
+        return "/uii/plugin_workflow_hu_importer.xhtml";
+    }
 
-	/**
-	 * Constructor
-	 */
-	public HuImporterWorkflowPlugin() {
-		log.info("Sample importer workflow plugin started");
+    /**
+     * Constructor
+     */
+    public HuImporterWorkflowPlugin() {
+        log.info("Sample importer workflow plugin started");
 
-		// read important configuration first
-		try {
-			readConfiguration();
-		} catch (NullPointerException ex) {
-			String message = "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file";
-			log.error(message, ex);
-			updateLog(message, 3);
+        // read important configuration first
+        try {
+            readConfiguration();
+        } catch (NullPointerException ex) {
+            String message = "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file";
+            log.error(message, ex);
+            updateLog(message, 3);
 
-		}
-	}
+        }
+    }
 
-	/**
-	 * private method to read main configuration file
-	 */
-	private void readConfiguration() throws NullPointerException {
-		updateLog("Start reading the configuration");
-		config = ConfigPlugins.getPluginConfig(title);
+    /**
+     * private method to read main configuration file
+     */
+    private void readConfiguration() throws NullPointerException {
+        updateLog("Start reading the configuration");
+        config = ConfigPlugins.getPluginConfig(title);
 
-		// read list of ImportSet configuration
-		importSets = new ArrayList<ImportSet>();
-		List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
-		for (HierarchicalConfiguration node : mappings) {
-			String name = node.getString("[@name]", null);
-			String metadataFolder = node.getString("[@metadataFolder]", null);
-			String mediaFolder = node.getString("[@mediaFolder]", null);
-			String workflow = node.getString("[@workflow]", null);
-			String project = node.getString("[@project]", null);
-			String mappingSet = node.getString("[@mappingSet]", null);
-			String publicationType = node.getString("[@publicationType]", null);
-			String structureType = node.getString("[@structureType]", null);
-			int rowStart = node.getInt("[@rowStart]", 2);
-			int rowEnd = node.getInt("[@rowEnd]", 0);
-			String importSetDescription = node.getString("[@importSetDescription]", null);
-			String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
-			boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
-			importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet,
-					publicationType, structureType, rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription,
-					descriptionMappingSet));
-		}
+        // read list of ImportSet configuration
+        importSets = new ArrayList<ImportSet>();
+        List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
+        for (HierarchicalConfiguration node : mappings) {
+            String name = node.getString("[@name]", null);
+            String metadataFolder = node.getString("[@metadataFolder]", null);
+            String mediaFolder = node.getString("[@mediaFolder]", null);
+            String workflow = node.getString("[@workflow]", null);
+            String project = node.getString("[@project]", null);
+            String mappingSet = node.getString("[@mappingSet]", null);
+            String publicationType = node.getString("[@publicationType]", null);
+            String structureType = node.getString("[@structureType]", null);
+            int rowStart = node.getInt("[@rowStart]", 2);
+            int rowEnd = node.getInt("[@rowEnd]", 0);
+            String importSetDescription = node.getString("[@importSetDescription]", null);
+            String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
+            boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
+            String eadType = node.getString("[@eadType]",null);
+            String eadFile = node.getString("[@eadFile]",null);
+            String eadNode = node.getString("[@eadNode]",null);
+            importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType, rowStart,
+                    rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType,eadFile,eadNode));
+        }
 
-		// write a log into the UI
-		updateLog("Configuration successfully read");
-	}
+        // write a log into the UI
+        updateLog("Configuration successfully read");
+    }
 
-	/**
-	 * cancel a running import
-	 */
-	public void cancel() {
-		run = false;
-	}
+    /**
+     * cancel a running import
+     */
+    public void cancel() {
+        run = false;
+    }
 
-	/**
-	 * reads List with MappingFields from the configuration for a given Mapping
-	 * 
-	 * @param mappingName
-	 * @return
-	 */
-	private List<MappingField> getMapping(String mappingName) {
-		// find the correct mapping node
-		mappingNode = null;
-		for (HierarchicalConfiguration node : config.configurationsAt("mappingSet")) {
-			String name = node.getString("[@name]");
-			if (name.equals(mappingName)) {
-				// log.debug("Configured mapping was found: " + name);
-				mappingNode = node;
-				break;
-			}
-		}
-		// if mapping node was not found, send back error message
-		if (mappingNode == null) {
-			return null;
-		}
+    /**
+     * reads List with MappingFields from the configuration for a given Mapping
+     * 
+     * @param mappingName
+     * @return
+     */
+    private List<MappingField> getMapping(String mappingName) {
+        // find the correct mapping node
+        mappingNode = null;
+        for (HierarchicalConfiguration node : config.configurationsAt("mappingSet")) {
+            String name = node.getString("[@name]");
+            if (name.equals(mappingName)) {
+                // log.debug("Configured mapping was found: " + name);
+                mappingNode = node;
+                break;
+            }
+        }
+        // if mapping node was not found, send back error message
+        if (mappingNode == null) {
+            return null;
+        }
 
-		// create a list of all fields to import
-		List<MappingField> mappingFields = new ArrayList<MappingField>();
-		List<HierarchicalConfiguration> fields = mappingNode.configurationsAt("field");
-		try {
-			for (HierarchicalConfiguration field : fields) {
-				String column = field.getString("[@column]", null);
-				String label = field.getString("[@label]", null);
-				String mets = field.getString("[@mets]", null);
-				String type = field.getString("[@type]", null);
-				String separator = field.getString("[@separator]", ",");
-				boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
-				boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
-				mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator,
-						blankAfterSeparator));
-			}
-			return mappingFields;
-		} catch (NullPointerException ex) {
-			String message = "Invalid MappingSet configuration. Mandatory parameter missing! Please correct the configuration file! Import aborted!";
-			log.error(message, ex);
-			updateLog(message, 3);
+        // create a list of all fields to import
+        List<MappingField> mappingFields = new ArrayList<MappingField>();
+        List<HierarchicalConfiguration> fields = mappingNode.configurationsAt("field");
+        try {
+            for (HierarchicalConfiguration field : fields) {
+                String column = field.getString("[@column]", null);
+                String label = field.getString("[@label]", null);
+                String mets = field.getString("[@mets]", null);
+                String type = field.getString("[@type]", null);
+                String separator = field.getString("[@separator]", ",");
+                boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
+                boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator));
+            }
+            return mappingFields;
+        } catch (NullPointerException ex) {
+            String message = "Invalid MappingSet configuration. Mandatory parameter missing! Please correct the configuration file! Import aborted!";
+            log.error(message, ex);
+            updateLog(message, 3);
 
-		}
-		return null;
-	}
+        }
+        return null;
+    }
 
-	/**
-	 * reads the importset and the xls file with the processdescription if it finds
-	 * a des
-	 * 
-	 * @param importSet
-	 * @param processFile
-	 * @return
-	 */
-	private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
-		Row processDescriptionRow = null;
-		if (importSet.getImportSetDescription() != null) {
-			List<MappingField> processMetadata = getMapping(importSet.getDescriptionMappingSet());
-			List<MappingField> processDescription = new ArrayList<MappingField>();
-			HashMap<String, String> processProperties = new HashMap<String, String>();
+    /**
+     * reads the importset and the xls file with the processdescription if it finds a des
+     * 
+     * @param importSet
+     * @param processFile
+     * @return
+     */
+    private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
+        Row processDescriptionRow = null;
+        if (importSet.getImportSetDescription() != null) {
+            List<MappingField> processMetadata = getMapping(importSet.getDescriptionMappingSet());
+            List<MappingField> processDescription = new ArrayList<MappingField>();
+            HashMap<String, String> processProperties = new HashMap<String, String>();
 
-			MappingField fileNameColumn = null;
-			if (processMetadata == null) {
-				updateLog("No valid ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet()
-						+ " was found!", 3);
-				failedImports.add(processFile.getFileName().toString());
-				return null;
-			}
+            MappingField fileNameColumn = null;
+            if (processMetadata == null) {
+                updateLog("No valid ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet() + " was found!", 3);
+                failedImports.add(processFile.getFileName().toString());
+                return null;
+            }
 
-			// filter processproperties from processMetadata
-			Iterator<MappingField> metaData = processMetadata.iterator();
-			while (metaData.hasNext()) {
-				MappingField field = metaData.next();
-				for (ProcessProperties typeName : ProcessProperties.values()) {
-					if (field.getType().equals(typeName.toString())) {
-						processDescription.add(field);
-						metaData.remove();
-					}
-				}
-			}
+            // filter processproperties from processMetadata
+            Iterator<MappingField> metaData = processMetadata.iterator();
+            while (metaData.hasNext()) {
+                MappingField field = metaData.next();
+                for (ProcessProperties typeName : ProcessProperties.values()) {
+                    if (field.getType().equals(typeName.toString())) {
+                        processDescription.add(field);
+                        metaData.remove();
+                    }
+                }
+            }
 
-			// get field that maps Column with FileName
-			for (MappingField field : processDescription) {
-				if (field.getType().equals("FileName")) {
-					fileNameColumn = field;
-					break;
-				}
-			}
+            // get field that maps Column with FileName
+            for (MappingField field : processDescription) {
+                if (field.getType().equals("FileName")) {
+                    fileNameColumn = field;
+                    break;
+                }
+            }
 
-			if (fileNameColumn != null) {
-				try {
-					XlsReader reader = new XlsReader(importSet.getImportSetDescription());
-					Sheet sheet = reader.getSheet();
+            if (fileNameColumn != null) {
+                try {
+                    XlsReader reader = new XlsReader(importSet.getImportSetDescription());
+                    Sheet sheet = reader.getSheet();
 
-					for (Row row : sheet) {
-						if (row.getRowNum() == 0) {
-							continue;
-							// skip header
-						}
-						if (XlsReader.getCellContent(row, fileNameColumn)
-								.equals(processFile.getFileName().toString())) {
-							processDescriptionRow = row;
-						}
-					}
-					if (processDescriptionRow == null) {
-						updateLog("A File with Processdescriptions was specified but the Filename("
-								+ processFile.getFileName().toString() + "was not found in "
-								+ importSet.getDescriptionMappingSet() + "!", 3);
-						updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
-						failedImports.add(processFile.getFileName().toString());
-						return null;
-					}
+                    for (Row row : sheet) {
+                        if (row.getRowNum() == 0) {
+                            continue;
+                            // skip header
+                        }
+                        if (XlsReader.getCellContent(row, fileNameColumn).equals(processFile.getFileName().toString())) {
+                            processDescriptionRow = row;
+                        }
+                    }
+                    if (processDescriptionRow == null) {
+                        updateLog("A File with Processdescriptions was specified but the Filename(" + processFile.getFileName().toString()
+                                + "was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
+                        updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
+                        failedImports.add(processFile.getFileName().toString());
+                        return null;
+                    }
 
-					for (MappingField field : processDescription) {
-						processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
-					}
+                    for (MappingField field : processDescription) {
+                        processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
+                    }
 
-					//
-					return new ProcessDescription(processDescriptionRow, processMetadata, processProperties,
-							processFile.getFileName());
-				} catch (IOException e) {
-					updateLog("Could open File with Path" + importSet.getImportSetDescription(), 3);
-				}
-			} else {
-				updateLog("A File with Processdescriptions was specified but no DescriptionMappingSet was provided!",
-						3);
-				updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
-				failedImports.add(processFile.getFileName().toString());
-				return null;
-			}
-		}
-		return new ProcessDescription(null, null, null, processFile.getFileName());
+                    //
+                    return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
+                } catch (IOException e) {
+                    updateLog("Could open File with Path" + importSet.getImportSetDescription(), 3);
+                }
+            } else {
+                updateLog("A File with Processdescriptions was specified but no DescriptionMappingSet was provided!", 3);
+                updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
+                failedImports.add(processFile.getFileName().toString());
+                return null;
+            }
+        }
+        return new ProcessDescription(null, null, null, processFile.getFileName());
 
-	}
+    }
 
-	/**
-	 * main method to start the actual import
-	 * 
-	 * @param importConfiguration
-	 */
-	public void startImport(ImportSet importSet) {
-		errorList = new ArrayList<LogMessage>();
-		failedImports = new ArrayList<String>();
-		StorageProviderInterface storageProvider = StorageProvider.getInstance();
-		updateLog("Start import for: " + importSet.getName());
-		progress = 0;
-		bhelp = new BeanHelper();
+    /**
+     * main method to start the actual import
+     * 
+     * @param importConfiguration
+     */
+    public void startImport(ImportSet importSet) {
+        errorList = new ArrayList<LogMessage>();
+        failedImports = new ArrayList<String>();
+        StorageProviderInterface storageProvider = StorageProvider.getInstance();
+        updateLog("Start import for: " + importSet.getName());
+        progress = 0;
+        bhelp = new BeanHelper();
 
-		// read mappings
+        // read mappings
 
-		List<MappingField> mappingFields = getMapping(importSet.getMapping());
-		if (mappingFields == null || mappingFields.size() == 0) {
-			updateLog("Import could not be executed because no MappingSet with the name " + importSet.getMapping()
-					+ "  was found!", 3);
-			return;
-		}
+        List<MappingField> mappingFields = getMapping(importSet.getMapping());
+        if (mappingFields == null || mappingFields.size() == 0) {
+            updateLog("Import could not be executed because no MappingSet with the name " + importSet.getMapping() + "  was found!", 3);
+            return;
+        }
 
-		// create folder for processed files
-		Path processedFolder = Paths.get(importSet.getMetadataFolder(), "processed");
-		if (!storageProvider.isFileExists(processedFolder)) {
-			try {
-				storageProvider.createDirectories(processedFolder);
-			} catch (IOException e) {
-				updateLog("Error creating Folder for processd xls documents! Export aborted " + e.getMessage(), 3);
-				return;
-			}
-		}
+        // create folder for processed files
+        Path processedFolder = Paths.get(importSet.getMetadataFolder(), "processed");
+        if (!storageProvider.isFileExists(processedFolder)) {
+            try {
+                storageProvider.createDirectories(processedFolder);
+            } catch (IOException e) {
+                updateLog("Error creating Folder for processd xls documents! Export aborted " + e.getMessage(), 3);
+                return;
+            }
+        }
 
-		// run the import in a separate thread to allow a dynamic progress bar
-		run = true;
-		Runnable runnable = () -> {
+        // run the import in a separate thread to allow a dynamic progress bar
+        run = true;
+        Runnable runnable = () -> {
 
-			// create list with files in metadata folder of importSet
-			List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(),
-					HuImporterWorkflowPlugin::isRegularAndNotHidden);
-			updateLog("Run through all import files");
-			itemsTotal = FilesToRead.size();
-			itemCurrent = 0;
-			Process process = null;
-			try {
-				
-				if (FilesToRead.size() == 0) {
-					updateLog("There are no files int the folder: " + importSet.getMetadataFolder(), 3);
-				}
-				for (Path processFile : FilesToRead) {
-					boolean successful = true;
-					ProcessDescription processDescription = getProcessDescription(importSet, processFile);
-					if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
-						updateLog("A importSetDescription was configured but there were Errors getting the Description",
-								3);
-						continue;
-					}
+            // create list with files in metadata folder of importSet
+            List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
+            updateLog("Run through all import files");
+            itemsTotal = FilesToRead.size();
+            itemCurrent = 0;
+            Process process = null;
+            try {
 
-					Thread.sleep(100);
-					if (!run) {
-						break;
-					}
-					updateLog("Datei: " + processFile.toString());
-					/*
-					 * FileInputStream inputStream = new FileInputStream(new
-					 * File(processFile.toString())); Workbook workbook = new
-					 * XSSFWorkbook(inputStream); Sheet sheet = workbook.getSheetAt(0);
-					 */
+                if (FilesToRead.size() == 0) {
+                    updateLog("There are no files int the folder: " + importSet.getMetadataFolder(), 3);
+                }
+                for (Path processFile : FilesToRead) {
+                    successful = true;
+                    ProcessDescription processDescription = getProcessDescription(importSet, processFile);
+                    if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
+                        updateLog("A importSetDescription was configured but there were Errors getting the Description", 3);
+                        continue;
+                    }
 
-					XlsReader reader = new XlsReader(processFile.toString());
-					Sheet sheet = reader.getSheet();
+                    Thread.sleep(100);
+                    if (!run) {
+                        break;
+                    }
+                    updateLog("Datei: " + processFile.toString());
+                    XlsReader reader = new XlsReader(processFile.toString());
+                    Sheet sheet = reader.getSheet();
 
-					try {
+                    try {
+                        Set<Path> imageFiles = null;
+                        if (importSet.getMediaFolder() != null) {
+                            // TODO catch IOException here!
+                            imageFiles = filterImagesInFolder(importSet.getMediaFolder());
+                        } else {
+                            // check if this is desired behavior!
+                            updateLog("No mediaFolder specified! Import aborted!", 3);
+                            failedImports.add(processFile.getFileName().toString());
+                            continue;
+                        }
+                        // create Process
+                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
+                        process = dManager.getProcess();
+                        this.prefs = dManager.getPrefs();
+                        updateLog("Start importing: " + process.getTitel(), 1);
 
-						Set<Path> imageFiles = null;
-						if (importSet.getMediaFolder() != null) {
-							// TODO catch IOException here!
-							imageFiles = filterImagesInFolder(importSet.getMediaFolder());
+                        if (processDescription != null && processDescription.getMetaDataMapping() != null) {
+                            for (MappingField mapping : processDescription.getMetaDataMapping()) {
+                                try {
+                                    String cellContent = XlsReader.getCellContent(processDescription.getRow(), mapping);
+                                    dManager.addMetaDataToTopStruct(mapping, cellContent);
+                                } catch (MetadataTypeNotAllowedException e) {
+                                    updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets " + mapping.getMets() + " in MappingSet "
+                                            + importSet.getDescriptionMappingSet(), 3);
+                                }
+                            }
+                        }
+                        // Initialize PageCount
+                        int PageCount = 0;
+                        for (Row row : sheet) {
+                            // skip rows until start row
+                            if (row.getRowNum() < importSet.getRowStart() - 1)
+                                continue;
+                            // end parsing after end row number
+                            if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd())
+                                break;
 
-						} else {
-							// check if this is desired behavior!
-							updateLog("No mediaFolder specified! Import aborted!", 3);
-							failedImports.add(processFile.getFileName().toString());
-							continue;
-						}
+                            // create the metadata fields by reading the config (and get content from the
+                            // content files of course)
+                            dManager.createStructureWithMetaData(row, mappingFields, imageFiles);
+                        }
+                        // write the metsfile
+                        dManager.writeMetadataFile();
+                        
+                        if (successful) {
+                            // start any open automatic tasks for the created process
+                            for (Step s : process.getSchritteList()) {
+                                if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+                                    ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                                    myThread.startOrPutToQueue();
+                                }
+                            }
+                            // move parsed xls to processed folder
+                            // TODO uncomment
+                            // storageProvider.move(processFile, Paths.get(processedFolder.toString(),
+                            // processFile.getFileName().toString()));
 
-						// create Process
-						DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
-						process = dManager.getProcess();
-						this.prefs = dManager.getPrefs();
-						updateLog("Start importing: " + process.getTitel(), 1);
+                        } else {
+                            updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
+                            for (Step s : process.getSchritteList()) {
+                                if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
+                                    s.setBearbeitungsstatusEnum(StepStatus.ERROR);
+                                    break;
+                                }
+                            }
+                            failedImports.add(processFile.getFileName().toString());
+                        }
+                        dManager.saveProcess();
 
-						if (processDescription != null && processDescription.getMetaDataMapping() != null) {
-							for (MappingField mapping : processDescription.getMetaDataMapping()) {
-								try {
-									String cellContent = XlsReader.getCellContent(processDescription.getRow(), mapping);
-									dManager.addMetaDataToTopStruct(mapping,cellContent);
-								} catch (MetadataTypeNotAllowedException e) {
-									updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets "
-											+ mapping.getMets() + " in MappingSet "
-											+ importSet.getDescriptionMappingSet(), 3);
-								}
-							}
-						}
+                    } catch (ProcessCreationException e) {
+                        // Shouldn't we end the import here??
+                        log.error("Error creating a process during the import", e);
+                        updateLog("Error creating a process during the import: " + e.getMessage(), 3);
+                    } catch (Exception e) {
 
-						// Initialize PageCount
-						int PageCount = 0;
-						for (Row row : sheet) {
-							// skip rows until start row
-							if (row.getRowNum() < importSet.getRowStart() - 1)
-								continue;
-							// end parsing after end row number
-							if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd())
-								break;
+                        String message = (process != null) ? "Error mapping and importing data during the import of process: "
+                                : "Error creating a process during import";
+                        message = message + process.getTitel() + e.getMessage();
 
+                        log.error("Error  during the import for process", e);
+                        if (process != null) {
+                            updateLogAndProcess(process.getId(), message, 3);
+                            try {
+                                ProcessManager.saveProcess(process);
+                            } catch (DAOException e1) {
 
-							// create the metadata fields by reading the config (and get content from the
-							// content files of course)
-							dManager.createStructure();
-							for (MappingField mappingField : mappingFields) {
+                                e1.printStackTrace();
+                            }
+                        }
+                    }
 
-								String cellContent = XlsReader.getCellContent(row, mappingField);
+                    // recalculate progress
+                    itemCurrent++;
+                    progress = 100 * itemCurrent / itemsTotal;
+                    updateLog("Processing of record done.");
+                }
 
-								if (StringUtils.isNotBlank(mappingField.getType())
-										&& StringUtils.isNotBlank(cellContent)) {
-									if (mappingField.getType().trim().equals("media")) {
-										dManager.addMediaFile(cellContent, imageFiles);
-									} else {
-										try {
-											 dManager.addDocStructWithMetaData(mappingField, cellContent);
-										} catch (MetadataTypeNotAllowedException e) {
-											updateLog("Invalid Mapping for Field " + mappingField.getType()
-													+ " in MappingSet " + importSet.getMapping(), 3);
-										}
-									}
-								}
-							}
-							
-							dManager.savesStructure();
-						}
-						// write the metsfile
-						dManager.writeMetadataFile();
-						
+                // finally last push
+                run = false;
+                Thread.sleep(1000);
+                updateLog("Import completed.", 2);
+                if (failedImports.size() > 0) {
+                    updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
+                    updateLog(failedImports.size() + " Import(s) finished with errors!", 3);
+                    failedImports.forEach((importFile) -> {
+                        updateLog(importFile, 3);
+                    });
+                }
 
-						if (successful) {
-							// start any open automatic tasks for the created process
-							for (Step s : process.getSchritteList()) {
-								if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
-									ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
-									myThread.startOrPutToQueue();
-								}
-							}
-							// move parsed xls to processed folder
-							// TODO uncomment
-							// storageProvider.move(processFile, Paths.get(processedFolder.toString(),
-							// processFile.getFileName().toString()));
-							updateLog("Process successfully created with ID: " + process.getId(), 2);
-						} else {
-							updateLogAndProcess(process.getId(),
-									"Process automatically created by " + getTitle() + " with ID:" + process.getId(),
-									1);
-							for (Step s : process.getSchritteList()) {
-								if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
-									s.setBearbeitungsstatusEnum(StepStatus.ERROR);
-									break;
-								}
-							}
-							failedImports.add(processFile.getFileName().toString());
-						}
-						dManager.saveProcess();
+            } catch (InterruptedException | IOException e) {
+                Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
+                log.error("Error trying to execute the import", e);
+                updateLog("Error trying to execute the import: " + e.getMessage(), 3);
+            }
 
-					} catch (ProcessCreationException e) {
-						// Shouldn't we end the import here??
-						log.error("Error creating a process during the import", e);
-						updateLog("Error creating a process during the import: " + e.getMessage(), 3);
-					} catch (Exception e) {
+            pusher.send("summary");
+        };
+        new Thread(runnable).start();
 
-						String message = (process != null)
-								? "Error mapping and importing data during the import of process: "
-								: "Error creating a process during import";
-						message = message + process.getTitel() + e.getMessage();
+    }
 
-						log.error("Error  during the import for process", e);
-						if (process != null) {
-							updateLogAndProcess(process.getId(), message, 3);
-							try {
-								ProcessManager.saveProcess(process);
-							} catch (DAOException e1) {
+    /**
+     * checks if the path isn't a directory and if it's not hidden
+     * 
+     * @param path
+     * @return
+     */
+    public static boolean isRegularAndNotHidden(Path path) {
 
-								e1.printStackTrace();
-							}
-						}
-					}
+        try {
+            return !Files.isDirectory(path) && !Files.isHidden(path);
+        } catch (IOException e) {
+            // if we can't open it we will not add it to the List
+            return false;
+        }
 
-					// recalculate progress
-					itemCurrent++;
-					progress = 100 * itemCurrent / itemsTotal;
-					updateLog("Processing of record done.");
-				}
+    }
 
-				// finally last push
-				run = false;
-				Thread.sleep(1000);
-				updateLog("Import completed.", 2);
-				if (failedImports.size() > 0) {
-					updateLog("We encountered errors during the import. Please check the logfile and the process logs!",
-							3);
-					updateLog(failedImports.size() + " Import(s) finished with errors!", 3);
-					failedImports.forEach((importFile) -> {
-						updateLog(importFile, 3);
-					});
-				}
+    /**
+     * returns list with paths of images in the provided folder
+     * 
+     * @param mediaFolder
+     * @return
+     * @throws IOException
+     */
+    private Set<Path> filterImagesInFolder(String mediaFolder) throws IOException {
+        try (Stream<Path> stream = Files.list(Paths.get(mediaFolder))) {
+            return stream.filter(file -> {
+                return !Files.isDirectory(file) && NIOFileUtils.checkImageType(file.getFileName().toString());
+            }).collect(Collectors.toSet());
+        }
 
-			} catch (InterruptedException | IOException e) {
-				Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
-				log.error("Error trying to execute the import", e);
-				updateLog("Error trying to execute the import: " + e.getMessage(), 3);
-			}
+    }
 
-			pusher.send("summary");
-		};
-		new Thread(runnable).start();
+    @Override
+    public void setPushContext(PushContext pusher) {
+        this.pusher = pusher;
+    }
 
-	}
+    /**
+     * simple method to send status message to gui
+     * 
+     * @param logmessage
+     */
+    public void updateLog(String logmessage) {
+        updateLog(logmessage, 0);
+    }
 
-	/**
-	 * checks if the path isn't a directory and if it's not hidden
-	 * 
-	 * @param path
-	 * @return
-	 */
-	public static boolean isRegularAndNotHidden(Path path) {
+    public void updateLogAndProcess(int processId, String message, int level) {
+        LogType type = (level == 3) ? LogType.ERROR : (level == 1) ? LogType.DEBUG : LogType.INFO;
 
-		try {
-			return !Files.isDirectory(path) && !Files.isHidden(path);
-		} catch (IOException e) {
-			// if we can't open it we will not add it to the List
-			return false;
-		}
+        Helper.addMessageToProcessLog(processId, type, message);
+        updateLog(message, level);
+    }
 
-	}
+    /**
+     * simple method to send status message with specific level to gui
+     * 
+     * @param logmessage
+     */
+    public void updateLog(String logmessage, int level) {
+        LogMessage message = new LogMessage(logmessage, level);
+        logQueue.add(message);
+        if (level == 3) {
+            errorList.add(message);
+            successful = false;
+        }
+        log.debug(logmessage);
+        if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
+            lastPush = System.currentTimeMillis();
+            pusher.send("update");
+        }
+    }
 
-	/**
-	 * returns list with paths of images in the provided folder
-	 * 
-	 * @param mediaFolder
-	 * @return
-	 * @throws IOException
-	 */
-	private Set<Path> filterImagesInFolder(String mediaFolder) throws IOException {
-		try (Stream<Path> stream = Files.list(Paths.get(mediaFolder))) {
-			return stream.filter(file -> {
-				return !Files.isDirectory(file) && NIOFileUtils.checkImageType(file.getFileName().toString());
-			}).collect(Collectors.toSet());
-		}
+    @Data
+    @AllArgsConstructor
+    public class MappingField {
+        @NonNull
+        private String column;
+        private String label;
+        private String mets;
+        @NonNull
+        private String type;
+        @NonNull
+        private String separator;
+        private boolean blankBeforeSeparator;
+        private boolean blankAfterSeparator;
+    }
 
-	}
+    @Data
+    @AllArgsConstructor
+    public class ImportSet {
+        @NonNull
+        private String name;
+        @NonNull
+        private String metadataFolder;
+        private String mediaFolder;
+        @NonNull
+        private String workflow;
+        private String project;
+        @NonNull
+        private String mapping;
+        @NonNull
+        private String publicationType;
+        @NonNull
+        private String structureType;
+        private int rowStart;
+        private int rowEnd;
+        private boolean useFileNameAsProcessTitle;
+        private String importSetDescription;
+        private String DescriptionMappingSet;
+        private String eadType;
+        private String eadFile;
+        private String eadNode;
+    }
 
-	@Override
-	public void setPushContext(PushContext pusher) {
-		this.pusher = pusher;
-	}
+    @Data
+    @AllArgsConstructor
+    public class LogMessage {
+        private String message;
+        private int level = 0;
+    }
 
-	/**
-	 * simple method to send status message to gui
-	 * 
-	 * @param logmessage
-	 */
-	public void updateLog(String logmessage) {
-		updateLog(logmessage, 0);
-	}
-
-	public void updateLogAndProcess(int processId, String message, int level) {
-		LogType type = (level == 3) ? LogType.ERROR : (level == 1) ? LogType.DEBUG : LogType.INFO;
-
-		Helper.addMessageToProcessLog(processId, type, message);
-		updateLog(message, level);
-	}
-
-	/**
-	 * simple method to send status message with specific level to gui
-	 * 
-	 * @param logmessage
-	 */
-	public void updateLog(String logmessage, int level) {
-		LogMessage message = new LogMessage(logmessage, level);
-		logQueue.add(message);
-		if (level == 3)
-			errorList.add(message);
-			successful=false;
-		log.debug(logmessage);
-		if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
-			lastPush = System.currentTimeMillis();
-			pusher.send("update");
-		}
-	}
-
-	@Data
-	@AllArgsConstructor
-	public class MappingField {
-		@NonNull
-		private String column;
-		private String label;
-		private String mets;
-		@NonNull
-		private String type;
-		@NonNull
-		private String separator;
-		private boolean blankBeforeSeparator;
-		private boolean blankAfterSeparator;
-	}
-
-	@Data
-	@AllArgsConstructor
-	public class ImportSet {
-		@NonNull
-		private String name;
-		@NonNull
-		private String metadataFolder;
-		private String mediaFolder;
-		@NonNull
-		private String workflow;
-		private String project;
-		@NonNull
-		private String mapping;
-		@NonNull
-		private String publicationType;
-		@NonNull
-		private String structureType;
-		private int rowStart;
-		private int rowEnd;
-		private boolean useFileNameAsProcessTitle;
-		private String importSetDescription;
-		private String DescriptionMappingSet;
-	}
-
-	@Data
-	@AllArgsConstructor
-	public class LogMessage {
-		private String message;
-		private int level = 0;
-	}
-
-	@Data
-	@AllArgsConstructor
-	public class ProcessDescription {
-		private Row row;
-		private List<MappingField> metaDataMapping;
-		private HashMap<String, String> ProcessProperties;
-		private Path fileName;
-	}
+    @Data
+    @AllArgsConstructor
+    public class ProcessDescription {
+        private Row row;
+        private List<MappingField> metaDataMapping;
+        private HashMap<String, String> ProcessProperties;
+        private Path fileName;
+    }
 }

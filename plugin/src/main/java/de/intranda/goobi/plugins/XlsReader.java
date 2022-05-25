@@ -1,8 +1,6 @@
 package de.intranda.goobi.plugins;
 
-import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.commons.lang3.StringUtils;
@@ -22,7 +20,7 @@ public class XlsReader {
     private Sheet sheet;
     public XlsReader(String path) throws IOException {
         
-        FileInputStream inputStream = new FileInputStream(new File(path));
+        FileInputStream inputStream = new FileInputStream(path);
         Workbook workbook = new XSSFWorkbook(inputStream);
         this.sheet = workbook.getSheetAt(0);
     }

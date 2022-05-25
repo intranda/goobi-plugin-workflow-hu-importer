@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -97,20 +98,22 @@ public class DocumentManager {
 			String workflow = importSet.getWorkflow();
 			Process template = ProcessManager.getProcessByExactTitle(workflow);
 			this.prefs = template.getRegelsatz().getPreferences();
-			Fileformat fileformat = new MetsMods(prefs);
+			Fileformat ff = new MetsMods(this.prefs);
 			DigitalDocument dd = new DigitalDocument();
-			fileformat.setDigitalDocument(dd);
+			ff.setDigitalDocument(dd);
 
 			// add the physical basics
-			DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
+			DocStruct physical = dd.createDocStruct(this.prefs.getDocStrctTypeByName("BoundBook"));
 			dd.setPhysicalDocStruct(physical);
 
-			DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(importSet.getPublicationType()));
-			dd.setLogicalDocStruct(logical);
-			MetadataType MDTypeForPath = prefs.getMetadataTypeByName("pathimagefiles");
+			DocStruct logic = dd.createDocStruct(this.prefs.getDocStrctTypeByName(importSet.getPublicationType()));
+			dd.setLogicalDocStruct(logic);
+			MetadataType MDTypeForPath = this.prefs.getMetadataTypeByName("pathimagefiles");
 
 			// save the process
-			Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
+			Process process = bhelp.createAndSaveNewProcess(template, processname, ff);
+            plugin.updateLog("Process successfully created with ID: " + process.getId(), 2);
+
 
 			// add some properties
 			bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
@@ -127,13 +130,13 @@ public class DocumentManager {
 			}
 			this.process = process;
 			// read fileformat etc. from process
-			this.fileformat = process.readMetadataFile();
-			this.digitalDocument = fileformat.getDigitalDocument();
-			this.logical = digitalDocument.getLogicalDocStruct();
-			this.physical = digitalDocument.getPhysicalDocStruct();
+			this.fileformat = this.process.readMetadataFile();
+			this.digitalDocument = this.fileformat.getDigitalDocument();
+			this.logical = this.digitalDocument.getLogicalDocStruct();
+			this.physical = this.digitalDocument.getPhysicalDocStruct();
 
 			// add imagepath:
-			Metadata imagePath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
+			Metadata imagePath = new Metadata(this.prefs.getMetadataTypeByName("pathimagefiles"));
 			imagePath.setValue(process.getImagesDirectory());
 			this.physical.addMetadata(imagePath);
 
@@ -147,18 +150,40 @@ public class DocumentManager {
 	public void addMetaDataToTopStruct(MappingField mappingField, String cellContent) throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
 		addMetadata(logical, mappingField, cellContent);
 	}
-	public void addDocStructWithMetaData(MappingField mappingField, String cellContent) throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+	public void addMetadataToStructure(MappingField mappingField, String cellContent) throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
 		
 		addMetadata(structure, mappingField, cellContent);
 	}
 	
-	public void createStructure() throws TypeNotAllowedForParentException {
-		structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(importSet.getStructureType()));
+	public void createStructure(String strucType) throws TypeNotAllowedForParentException {
+		structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(strucType));
 	}
 	
-	public void savesStructure() throws TypeNotAllowedAsChildException {
+	public void addStructureToLogical() throws TypeNotAllowedAsChildException {
 		logical.addChild(structure);
-	} 
+	}
+	
+	public void createStructureWithMetaData(Row row,List<MappingField> mappingFields, Set<Path> imageFiles) throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, IOException, InterruptedException, SwapException, DAOException{
+	    createStructure(importSet.getStructureType());
+        for (MappingField mappingField : mappingFields) {
+
+            String cellContent = XlsReader.getCellContent(row, mappingField);
+
+            if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
+                if (mappingField.getType().trim().equals("media")) {
+                    addMediaFile(cellContent, imageFiles);
+                } else {
+                    try {
+                        addMetadataToStructure(mappingField, cellContent);
+                    } catch (MetadataTypeNotAllowedException e) {
+                        plugin.updateLogAndProcess(process.getId(),"Invalid Mapping for Field " + mappingField.getType() + " in MappingSet "
+                                + importSet.getMapping(), 3);
+                    }
+                }
+            }
+        }
+        addStructureToLogical();
+	}
 	
 	public void saveProcess() throws DAOException {
 		ProcessManager.saveProcess(process);
