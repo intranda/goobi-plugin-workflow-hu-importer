@@ -36,6 +36,7 @@ import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.StorageProviderInterface;
 import de.sub.goobi.helper.enums.StepStatus;
 import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -46,6 +47,10 @@ import net.xeoh.plugins.base.annotations.PluginImplementation;
 import ugh.dl.DocStruct;
 import ugh.dl.Prefs;
 import ugh.exceptions.MetadataTypeNotAllowedException;
+import ugh.exceptions.PreferencesException;
+import ugh.exceptions.TypeNotAllowedAsChildException;
+import ugh.exceptions.TypeNotAllowedForParentException;
+import ugh.exceptions.WriteException;
 
 @PluginImplementation
 @Log4j2
@@ -178,7 +183,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String separator = field.getString("[@separator]", ",");
                 boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
-                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator));
+                String ead = field.getString("[@ead]", null);
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator,ead));
             }
             return mappingFields;
         } catch (NullPointerException ex) {
@@ -191,7 +197,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     }
 
     /**
-     * reads the importset and the xls file with the processdescription if it finds a des
+     * reads the importset and the xls file with the processdescription
      * 
      * @param importSet
      * @param processFile
@@ -350,6 +356,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         // create Process
                         DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
                         process = dManager.getProcess();
+                        EadManager eadManager = new EadManager(importSet,process.getTitel());
+                        eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                         this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
 
@@ -383,6 +391,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         
                         if (successful) {
                             // start any open automatic tasks for the created process
+                            eadManager.saveArchiveAndLeave();
                             for (Step s : process.getSchritteList()) {
                                 if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
                                     ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
@@ -395,6 +404,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // processFile.getFileName().toString()));
 
                         } else {
+                            eadManager.saveArchiveAndLeave();
                             updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
                             for (Step s : process.getSchritteList()) {
                                 if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
@@ -406,15 +416,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         }
                         dManager.saveProcess();
 
-                    } catch (ProcessCreationException e) {
+                    } catch (ProcessCreationException| TypeNotAllowedAsChildException| TypeNotAllowedForParentException| PreferencesException|SwapException|WriteException| DAOException e) {
                         // Shouldn't we end the import here??
                         log.error("Error creating a process during the import", e);
                         updateLog("Error creating a process during the import: " + e.getMessage(), 3);
-                    } catch (Exception e) {
+                    } catch (IOException e) {
 
                         String message = (process != null) ? "Error mapping and importing data during the import of process: "
                                 : "Error creating a process during import";
-                        message = message + process.getTitel() + e.getMessage();
+                        message = message + process.getTitel() +" "+ e.getMessage();
 
                         log.error("Error  during the import for process", e);
                         if (process != null) {
@@ -544,6 +554,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String separator;
         private boolean blankBeforeSeparator;
         private boolean blankAfterSeparator;
+        private String ead;
     }
 
     @Data
