@@ -73,7 +73,7 @@ public class EadManager {
         addDocumentNodeWithMetadata(importSet.getEadType(),row, mappingFields);
     }
 
-    public void addDocumentNodeWithMetadata(String NodeType, Row row, List<MappingField> mappingFields) {
+    private void addDocumentNodeWithMetadata(String NodeType, Row row, List<MappingField> mappingFields) {
         archivePlugin.addNode();
         IEadEntry entry = archivePlugin.getSelectedEntry();
         // set the prefered node type for the created node

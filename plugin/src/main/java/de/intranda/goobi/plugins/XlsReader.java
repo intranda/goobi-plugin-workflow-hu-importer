@@ -16,13 +16,19 @@ import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
 import lombok.Getter;
 
 public class XlsReader {
+    
+    private Workbook workbook;
     @Getter
     private Sheet sheet;
     public XlsReader(String path) throws IOException {
         
         FileInputStream inputStream = new FileInputStream(path);
-        Workbook workbook = new XSSFWorkbook(inputStream);
+        this.workbook = new XSSFWorkbook(inputStream);
         this.sheet = workbook.getSheetAt(0);
+    }
+    
+    public void closeWorkbook() throws IOException {
+        this.workbook.close();
     }
     /**
      * Read content vom excel cell

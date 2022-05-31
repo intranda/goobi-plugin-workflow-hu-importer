@@ -8,32 +8,67 @@
 		project: the goobi project that shall be used
 		mappingSet: the mapping that shall be used by the import set
 		publicationType: the publicationType that shall be used i.e. Monograph,...
+		
         -->
-        
-	<importSet name="TestImportSet" 
-		metadataFolder="/opt/digiverso/import/sample/" 
-		mediaFolder ="/opt/digiverso/import/images/" 
+        <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze)-->
+        <importSet name="Lochkarten EAD" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
-		mappingSet="Monograph" 
-		publicationType="Monograph"
-		structureType="Chapter"
+		mappingSet="Lochkarten" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
+		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		descriptionMappingSet="Description"
+		eadType="file" 
+		eadFile="EAD-Store - Sudanarchäologie.xml" 
+		eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
+		/>
+		
+	<importSet name="Lochkarten" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		workflow="Sample_Workflow"
+		project="Archive_Project" 
+		mappingSet="Lochkarten" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
 		importSetDescription="/opt/digiverso/import/description/description.xlsx"
 		descriptionMappingSet="Description"
 		/>
-	
-	<mappingSet name="Monograph">
-		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="metadata" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="media"/>
-		<field column="J" label="Maße" type="metadata" mets="TitleDocMainShort"/>
-		<field column="O" label="Author" type="person" mets="Author"/>
+		
+		<importSet name="LochkartenOhneDescription" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		workflow="Sample_Workflow"
+		project="Archive_Project" 
+		mappingSet="Lochkarten" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
+		useFileNameAsProcessTitle="true"
+		/>
+		
+	<mappingSet name="Lochkarten">
+		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="shelfmarksource"/>
+		<field column="E" label="Institutionsnachweis/ Sammlung" type="metadata" mets="PhysicalLocation"/>
+		<field column="F" label="Titel" type="metadata" mets="TitleDocMain"/>
+		<field column="G" label="Schlagwort" type="metadata" mets="Subject"/> <!--mets="Subject"-->
+		<field column="H" label="Schlagwort" type="metadata" mets="Subject"/>
+		<field column="I" label="Material" type="metadata" mets="FormatSourcePrint"/>
+		<field column="J" label="Maße" type="metadata" mets="SizeSourcePrint"/>
+		<field column="K" label="Trenner" type="metadata" mets="OtherTitle"/>
+		<field column="L" label="Geokoordinaten" type="metadata" mets=""/>
+		
+		
+		<field column="M,N" label="Datei recto" type="metadata" mets="IdentifierRelatedWork"/>
+		<field column="M,N" label="Datei recto" type="media" mets="IdentifierRelatedWork"/>
 	</mappingSet>
 	
 	<mappingSet name="Description">
 		<field column="A" label="Dateiname" type="FileName" />
-		<field column="B" label="Titel" type="metadata" mets="TitleDocMain"/>
-		<field column="C" label="Autor" type="person" mets="Author"/>
+		<field column="B" label="Titel" type="metadata" mets="TitleDocMain"  ead="unittitle"/>
+		<field column="D" label="Prozessname" type="ProcessName"/>
+		<field column="E" label="Date" type="metadata" ead="unitdate" />
 	</mappingSet>
-	
 </config_plugin>

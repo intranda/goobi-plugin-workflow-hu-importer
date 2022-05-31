@@ -131,11 +131,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String importSetDescription = node.getString("[@importSetDescription]", null);
             String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
             boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
-            String eadType = node.getString("[@eadType]",null);
-            String eadFile = node.getString("[@eadFile]",null);
-            String eadNode = node.getString("[@eadNode]",null);
+            String eadType = node.getString("[@eadType]", null);
+            String eadFile = node.getString("[@eadFile]", null);
+            String eadNode = node.getString("[@eadNode]", null);
             importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType, rowStart,
-                    rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType,eadFile,eadNode));
+                    rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode));
         }
 
         // write a log into the UI
@@ -184,7 +184,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
                 String ead = field.getString("[@ead]", null);
-                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator,ead));
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead));
             }
             return mappingFields;
         } catch (NullPointerException ex) {
@@ -256,6 +256,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 + "was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
                         updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
                         failedImports.add(processFile.getFileName().toString());
+                        reader.closeWorkbook();
                         return null;
                     }
 
@@ -263,8 +264,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
                     }
 
-                    //
+                    reader.closeWorkbook();
                     return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
+                    
                 } catch (IOException e) {
                     updateLog("Could open File with Path" + importSet.getImportSetDescription(), 3);
                 }
@@ -310,6 +312,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 return;
             }
         }
+        Path failureFolder = Paths.get(importSet.getMetadataFolder(), "failure");
+        if (!storageProvider.isFileExists(failureFolder)) {
+            try {
+                storageProvider.createDirectories(failureFolder);
+            } catch (IOException e) {
+                updateLog("Error creating Folder for xls documents of failed Imports! Export aborted " + e.getMessage(), 3);
+                return;
+            }
+        }
 
         // run the import in a separate thread to allow a dynamic progress bar
         run = true;
@@ -339,6 +350,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         break;
                     }
                     updateLog("Datei: " + processFile.toString());
+                    
+                    //Try to open File if IOException flies here no process will be created
                     XlsReader reader = new XlsReader(processFile.toString());
                     Sheet sheet = reader.getSheet();
 
@@ -356,7 +369,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         // create Process
                         DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
                         process = dManager.getProcess();
-                        EadManager eadManager = new EadManager(importSet,process.getTitel());
+                        EadManager eadManager = new EadManager(importSet, process.getTitel());
                         eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                         this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
@@ -386,9 +399,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // content files of course)
                             dManager.createStructureWithMetaData(row, mappingFields, imageFiles);
                         }
+                        // close workbook
+                        reader.closeWorkbook();
                         // write the metsfile
                         dManager.writeMetadataFile();
-                        
+                        updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
                         if (successful) {
                             // start any open automatic tasks for the created process
                             eadManager.saveArchiveAndLeave();
@@ -398,14 +413,17 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     myThread.startOrPutToQueue();
                                 }
                             }
+                            
                             // move parsed xls to processed folder
-                            // TODO uncomment
-                            // storageProvider.move(processFile, Paths.get(processedFolder.toString(),
-                            // processFile.getFileName().toString()));
+                            storageProvider.move(processFile, Paths.get(processedFolder.toString(),
+                                    processFile.getFileName().toString()));
 
                         } else {
+                            // move parsed xls to failure folder
+                            storageProvider.move(processFile, Paths.get(failureFolder.toString(),
+                            processFile.getFileName().toString()));
                             eadManager.saveArchiveAndLeave();
-                            updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
+   
                             for (Step s : process.getSchritteList()) {
                                 if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
                                     s.setBearbeitungsstatusEnum(StepStatus.ERROR);
@@ -416,15 +434,16 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         }
                         dManager.saveProcess();
 
-                    } catch (ProcessCreationException| TypeNotAllowedAsChildException| TypeNotAllowedForParentException| PreferencesException|SwapException|WriteException| DAOException e) {
+                    } catch (ProcessCreationException e) {
                         // Shouldn't we end the import here??
                         log.error("Error creating a process during the import", e);
                         updateLog("Error creating a process during the import: " + e.getMessage(), 3);
-                    } catch (IOException e) {
+                    } catch (IOException | TypeNotAllowedAsChildException | TypeNotAllowedForParentException | PreferencesException | SwapException
+                            | WriteException | DAOException e) {
 
                         String message = (process != null) ? "Error mapping and importing data during the import of process: "
                                 : "Error creating a process during import";
-                        message = message + process.getTitel() +" "+ e.getMessage();
+                        message = message + process.getTitel() + " " + e.getMessage();
 
                         log.error("Error  during the import for process", e);
                         if (process != null) {
@@ -550,7 +569,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String mets;
         @NonNull
         private String type;
-        @NonNull
         private String separator;
         private boolean blankBeforeSeparator;
         private boolean blankAfterSeparator;
