@@ -1,15 +1,23 @@
 <config_plugin>
 	
 	<!-- 	import set for excel files
+	Attributes in [] are optional
 		name: name of the export set, which will be displayed in the dropdonwnmenu
 		metadataFolder: where are the documents located
-		mediaFolder: where are the media files located
+		[mediaFolder]: where are the media files located
 		workflow: the workflow that shall be used
-		project: the goobi project that shall be used
+		[project:] the goobi project that shall be used
 		mappingSet: the mapping that shall be used by the import set
 		publicationType: the publicationType that shall be used i.e. Monograph,...
-		
-        -->
+		structureType="structureType the metadata will be mapped to"
+		[importSetDescription]: Path to xls-file with description of importset-files
+		[descriptionMappingSet]: Mapping for the importsetdescription file
+		[eadType] Type of the EAD-entry
+		[eadFile]= Name of the EAD-file/database
+		[eadNode]="ID of the parent node that this Imporset will use"
+		[rowStart] first row that will be read
+		[rowEnd] last row that will be read
+	  -->
         <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze)-->
         <importSet name="Lochkarten EAD" 
 		metadataFolder="/opt/digiverso/import/mdvos/" 
@@ -48,7 +56,20 @@
 		structureType="Lochkarte"
 		useFileNameAsProcessTitle="true"
 		/>
-		
+	<!-- mapping set -> set of fields that describe a mapping
+		name = name of the MappingSet
+		 
+		field - mapping for a row of an excel file
+		Attributes in [] are optional
+		column: column of the xls-file that will be mapped
+        [label];
+        [mets] mets of metadata element
+        type: person, metadata, media   //maybe add eadonly
+        [separator]: default value is ;
+        [blankBeforeSeparator]: default value is false
+        [blankAfterSeparator]: default value is false
+        [ead] name of the ead metadata type
+	-->
 	<mappingSet name="Lochkarten">
 		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="shelfmarksource"/>
 		<field column="E" label="Institutionsnachweis/ Sammlung" type="metadata" mets="PhysicalLocation"/>

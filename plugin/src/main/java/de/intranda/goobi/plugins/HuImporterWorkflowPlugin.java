@@ -266,7 +266,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                     reader.closeWorkbook();
                     return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
-                    
+
                 } catch (IOException e) {
                     updateLog("Could open File with Path" + importSet.getImportSetDescription(), 3);
                 }
@@ -350,7 +350,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         break;
                     }
                     updateLog("Datei: " + processFile.toString());
-                    
+
                     //Try to open File if IOException flies here no process will be created
                     XlsReader reader = new XlsReader(processFile.toString());
                     Sheet sheet = reader.getSheet();
@@ -369,8 +369,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         // create Process
                         DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
                         process = dManager.getProcess();
-                        EadManager eadManager = new EadManager(importSet, process.getTitel());
-                        eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
+                        EadManager eadManager = null;
+                        if (StringUtils.isNotBlank(importSet.getEadFile())) {
+                            eadManager = new EadManager(importSet, process.getTitel());
+                            if (eadManager.isDbStatusOk()) {
+                                eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
+                            }else {
+                                updateLogAndProcess(process.getId(), "Couldn't open baseX-DB, no EAD-Entries were generated for this process", 3);
+                            }
+                        }
                         this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
 
@@ -406,24 +413,20 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
                         if (successful) {
                             // start any open automatic tasks for the created process
-                            eadManager.saveArchiveAndLeave();
                             for (Step s : process.getSchritteList()) {
                                 if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
                                     ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
                                     myThread.startOrPutToQueue();
                                 }
                             }
-                            
+
                             // move parsed xls to processed folder
-                            storageProvider.move(processFile, Paths.get(processedFolder.toString(),
-                                    processFile.getFileName().toString()));
+                            storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
 
                         } else {
                             // move parsed xls to failure folder
-                            storageProvider.move(processFile, Paths.get(failureFolder.toString(),
-                            processFile.getFileName().toString()));
-                            eadManager.saveArchiveAndLeave();
-   
+                            storageProvider.move(processFile, Paths.get(failureFolder.toString(), processFile.getFileName().toString()));
+
                             for (Step s : process.getSchritteList()) {
                                 if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
                                     s.setBearbeitungsstatusEnum(StepStatus.ERROR);
@@ -431,6 +434,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 }
                             }
                             failedImports.add(processFile.getFileName().toString());
+                        }
+                        
+                        //if eadManager was used save Changes
+                        if (eadManager!=null && eadManager.isDbStatusOk()) {
+                            eadManager.saveArchiveAndLeave();
                         }
                         dManager.saveProcess();
 

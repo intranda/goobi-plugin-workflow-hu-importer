@@ -18,12 +18,15 @@ import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
 import de.intranda.goobi.plugins.model.FieldValue;
 import de.sub.goobi.helper.Helper;
 import io.goobi.workflow.locking.LockingBean;
+import lombok.Getter;
 
 public class EadManager {
     private ArchiveManagementAdministrationPlugin archivePlugin;
     private String processName;
     private ImportSet importSet;
     private IEadEntry selectedNode = null;
+    @Getter
+    private boolean dbStatusOk;
 
     public EadManager(ImportSet importSet, String processName) {
         this.importSet = importSet;
@@ -35,7 +38,7 @@ public class EadManager {
         User user = Helper.getCurrentUser();
         String username = user != null ? user.getNachVorname() : "-";
         if (!LockingBean.lockObject(importSet.getEadFile(), username)) {
-            Helper.setFehlerMeldung("plugin_administration_archive_databaseLocked");
+            this.dbStatusOk=false;
             return;
         }
 
@@ -43,6 +46,8 @@ public class EadManager {
         this.archivePlugin.getPossibleDatabases();
         this.archivePlugin.setSelectedDatabase(importSet.getEadFile());
         this.archivePlugin.loadSelectedDatabase();
+        this.dbStatusOk=checkDB();
+      
 
         if (StringUtils.isNotBlank(importSet.getEadNode())) {
             this.selectedNode = findNode(importSet.getEadNode());
@@ -50,6 +55,10 @@ public class EadManager {
                 archivePlugin.setSelectedEntry(this.selectedNode);
         }
 
+    }
+    
+    private boolean checkDB () {
+        return StringUtils.isNotBlank(this.archivePlugin.getSelectedDatabase())&&this.archivePlugin.getSelectedDatabase().equals(importSet.getEadFile());
     }
 
     private IEadEntry findNode(String eadNode) {
