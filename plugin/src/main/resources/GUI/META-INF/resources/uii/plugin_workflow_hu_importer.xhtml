@@ -75,7 +75,7 @@
 
 									<!--                                     <h:outputText -->
 									<!--                                         styleClass="alert alert-warning alert-dismissable margin-bottom-10 margin-top-10" -->
-									<!--                                         value="#{msgs.plugin_intranda_workflow_sample_introduction}: #{NavigationForm.workflowPlugin.importFolder}"/> -->
+									<!--                                         value="#{msgs.plugin_intranda_workflow_hu_import_introduction}: #{NavigationForm.workflowPlugin.importFolder}"/> -->
 
 
 									<div class="form-actions">
@@ -105,12 +105,12 @@
 												<!-- import button -->
 												<div class="btn-group font-size-s pull-right"
 													data-toggle="tooltip"
-													title="#{msgs.plugin_intranda_workflow_sample_startImportTitle}">
+													title="#{msgs.plugin_intranda_workflow_hu_import_startImportTitle}">
 													<a class="btn  btn-blue font-size-s dropdown-toggle"
 														data-toggle="dropdown"> <i
 														class="fa fa-play-circle margin-right-10"></i> <h:outputText
 															styleClass="margin-right-5"
-															value="#{msgs.plugin_intranda_workflow_sample_startImport}" />
+															value="#{msgs.plugin_intranda_workflow_hu_import_startImport}" />
 														<span class="caret"></span>
 													</a>
 
@@ -147,34 +147,40 @@
 				</div>
 			</div>
 		</h:panelGroup>
-		
+
 		<!-- log view -->
 		<h:panelGroup id="logs">
-			<h:panelGroup styleClass="logs"
+			<ui:fragment
 				rendered="#{LoginForm.hasRole('Plugin_workflow_hu_importer')}">
-				<ui:repeat var="log"
-					value="#{NavigationForm.workflowPlugin.logQueue}">
-					<h:outputText value="#{log.message}"
-						style="#{log.level eq 3 ? 'color: red' : log.level eq 2 ? 'font-weight: bold' : log.level eq 1 ? '' : 'color: #ccc'}" />
-					<br />
-				</ui:repeat>
-			</h:panelGroup>
+				<h4>#{msgs.plugin_intranda_workflow_hu_import_messageLog}</h4>
+				<h:panelGroup styleClass="logs">
+					<ui:repeat var="log"
+						value="#{NavigationForm.workflowPlugin.logQueue}">
+						<h:outputText value="#{log.message}"
+							style="#{log.level eq 3 ? 'color: red' : log.level eq 2 ? 'font-weight: bold' : log.level eq 1 ? '' : 'color: #ccc'}" />
+						<br />
+					</ui:repeat>
+				</h:panelGroup>
+			</ui:fragment>
 		</h:panelGroup>
 		<!-- // log view -->
 		<!-- summary view -->
-		<h5>Error Log</h5>
 		<h:panelGroup id="summary">
-			<h:panelGroup styleClass="logs"
-				rendered="#{LoginForm.hasRole('Plugin_workflow_hu_importer')}">
-				<ui:repeat var="log"
-					value="#{NavigationForm.workflowPlugin.errorList}">
-					<h:outputText value="#{log.message}"
-						style="#{log.level eq 3 ? 'color: red' : log.level eq 2 ? 'font-weight: bold' : log.level eq 1 ? '' : 'color: #ccc'}" />
-					<br />
-				</ui:repeat>
-			</h:panelGroup>
+			<ui:fragment
+				rendered="#{LoginForm.hasRole('Plugin_workflow_hu_importer') and not NavigationForm.workflowPlugin.successful}">
+				<h4>#{msgs.plugin_intranda_workflow_hu_import_errorLog}</h4>
+				<h:panelGroup styleClass="logs">
+					<ui:repeat var="log"
+						value="#{NavigationForm.workflowPlugin.errorList}">
+						<h:outputText value="#{log.message}"
+							style="#{log.level eq 3 ? 'color: red' : log.level eq 2 ? 'font-weight: bold' : log.level eq 1 ? '' : 'color: #ccc'}" />
+						<br />
+					</ui:repeat>
+				</h:panelGroup>
+			</ui:fragment>
 		</h:panelGroup>
-		<!-- // log view -->
+
+		<!-- // summary view -->
 		<!-- websocket communication -->
 		<o:socket channel="workflowPluginPush" scope="session">
 			<f:ajax event="update" render="myform" />

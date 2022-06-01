@@ -78,6 +78,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private Queue<LogMessage> logQueue = new CircularFifoQueue<LogMessage>(48);
     private Prefs prefs;
     private ArrayList<String> failedImports;
+    @Getter
     private boolean successful;
 
     @Override
