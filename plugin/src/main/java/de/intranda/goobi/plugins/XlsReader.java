@@ -1,8 +1,6 @@
 package de.intranda.goobi.plugins;
 
-import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.commons.lang3.StringUtils;
@@ -18,13 +16,19 @@ import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
 import lombok.Getter;
 
 public class XlsReader {
+    
+    private Workbook workbook;
     @Getter
     private Sheet sheet;
     public XlsReader(String path) throws IOException {
         
-        FileInputStream inputStream = new FileInputStream(new File(path));
-        Workbook workbook = new XSSFWorkbook(inputStream);
+        FileInputStream inputStream = new FileInputStream(path);
+        this.workbook = new XSSFWorkbook(inputStream);
         this.sheet = workbook.getSheetAt(0);
+    }
+    
+    public void closeWorkbook() throws IOException {
+        this.workbook.close();
     }
     /**
      * Read content vom excel cell

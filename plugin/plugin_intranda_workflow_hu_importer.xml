@@ -1,39 +1,95 @@
 <config_plugin>
 	
 	<!-- 	import set for excel files
+	Attributes in [] are optional
 		name: name of the export set, which will be displayed in the dropdonwnmenu
 		metadataFolder: where are the documents located
-		mediaFolder: where are the media files located
+		[mediaFolder]: where are the media files located
 		workflow: the workflow that shall be used
-		project: the goobi project that shall be used
+		[project:] the goobi project that shall be used
 		mappingSet: the mapping that shall be used by the import set
 		publicationType: the publicationType that shall be used i.e. Monograph,...
-        -->
-        
-	<importSet name="TestImportSet" 
-		metadataFolder="/opt/digiverso/import/sample/" 
-		mediaFolder ="/opt/digiverso/import/images/" 
+		structureType="structureType the metadata will be mapped to"
+		[importSetDescription]: Path to xls-file with description of importset-files
+		[descriptionMappingSet]: Mapping for the importsetdescription file
+		[eadType] Type of the EAD-entry
+		[eadFile]= Name of the EAD-file/database
+		[eadNode]="ID of the parent node that this Imporset will use"
+		[rowStart] first row that will be read
+		[rowEnd] last row that will be read
+	  -->
+        <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze)-->
+        <importSet name="Lochkarten EAD" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
-		mappingSet="Monograph" 
-		publicationType="Monograph"
-		structureType="Chapter"
+		mappingSet="Lochkarten" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
+		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		descriptionMappingSet="Description"
+		eadType="file" 
+		eadFile="EAD-Store - Sudanarchäologie.xml" 
+		eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
+		/>
+		
+	<importSet name="Lochkarten" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		workflow="Sample_Workflow"
+		project="Archive_Project" 
+		mappingSet="Lochkarten" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
 		importSetDescription="/opt/digiverso/import/description/description.xlsx"
 		descriptionMappingSet="Description"
 		/>
-	
-	<mappingSet name="Monograph">
-		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="metadata" mets="TitleDocMainShort"/>
-		<field column="M,N" label="Datei recto" type="media"/>
-		<field column="J" label="Maße" type="metadata" mets="TitleDocMainShort"/>
-		<field column="O" label="Author" type="person" mets="Author"/>
+		
+		<importSet name="LochkartenOhneDescription" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		workflow="Sample_Workflow"
+		project="Archive_Project" 
+		mappingSet="Lochkarten" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
+		useFileNameAsProcessTitle="true"
+		/>
+	<!-- mapping set -> set of fields that describe a mapping
+		name = name of the MappingSet
+		 
+		field - mapping for a row of an excel file
+		Attributes in [] are optional
+		column: column of the xls-file that will be mapped
+        [label];
+        [mets] mets of metadata element
+        type: person, metadata, media   //maybe add eadonly
+        [separator]: default value is ;
+        [blankBeforeSeparator]: default value is false
+        [blankAfterSeparator]: default value is false
+        [ead] name of the ead metadata type
+	-->
+	<mappingSet name="Lochkarten">
+		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="shelfmarksource"/>
+		<field column="E" label="Institutionsnachweis/ Sammlung" type="metadata" mets="PhysicalLocation"/>
+		<field column="F" label="Titel" type="metadata" mets="TitleDocMain"/>
+		<field column="G" label="Schlagwort" type="metadata" mets="Subject"/> <!--mets="Subject"-->
+		<field column="H" label="Schlagwort" type="metadata" mets="Subject"/>
+		<field column="I" label="Material" type="metadata" mets="FormatSourcePrint"/>
+		<field column="J" label="Maße" type="metadata" mets="SizeSourcePrint"/>
+		<field column="K" label="Trenner" type="metadata" mets="OtherTitle"/>
+		<field column="L" label="Geokoordinaten" type="metadata" mets=""/>
+		
+		
+		<field column="M,N" label="Datei recto" type="metadata" mets="IdentifierRelatedWork"/>
+		<field column="M,N" label="Datei recto" type="media" mets="IdentifierRelatedWork"/>
 	</mappingSet>
 	
 	<mappingSet name="Description">
 		<field column="A" label="Dateiname" type="FileName" />
-		<field column="B" label="Titel" type="metadata" mets="TitleDocMain"/>
-		<field column="C" label="Autor" type="person" mets="Author"/>
+		<field column="B" label="Titel" type="metadata" mets="TitleDocMain"  ead="unittitle"/>
+		<field column="D" label="Prozessname" type="ProcessName"/>
+		<field column="E" label="Date" type="metadata" ead="unitdate" />
 	</mappingSet>
-	
 </config_plugin>
