@@ -56,7 +56,7 @@ import ugh.exceptions.WriteException;
 @Log4j2
 public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
-    private ArrayList<LogMessage> errorList;
+    private ArrayList<LogMessage> errorList = new ArrayList<LogMessage>();
     private BeanHelper bhelp;
     @Getter
     private String title = "intranda_workflow_hu_importer";
@@ -78,8 +78,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private Queue<LogMessage> logQueue = new CircularFifoQueue<LogMessage>(48);
     private Prefs prefs;
     private ArrayList<String> failedImports;
-    @Getter
-    private boolean successful;
+    private boolean successful = true;
 
     @Override
     public PluginType getType() {
@@ -97,50 +96,59 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public HuImporterWorkflowPlugin() {
         log.info("Sample importer workflow plugin started");
 
-        // read important configuration first
-        try {
-            readConfiguration();
-        } catch (NullPointerException ex) {
-            String message = "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file";
-            log.error(message, ex);
-            updateLog(message, 3);
-
-        }
+        //read important configuration first
+        readConfiguration();
     }
 
     /**
      * private method to read main configuration file
      */
-    private void readConfiguration() throws NullPointerException {
+    private void readConfiguration() {
         updateLog("Start reading the configuration");
         config = ConfigPlugins.getPluginConfig(title);
 
         // read list of ImportSet configuration
         importSets = new ArrayList<ImportSet>();
-        List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
-        for (HierarchicalConfiguration node : mappings) {
-            String name = node.getString("[@name]", null);
-            String metadataFolder = node.getString("[@metadataFolder]", null);
-            String mediaFolder = node.getString("[@mediaFolder]", null);
-            String workflow = node.getString("[@workflow]", null);
-            String project = node.getString("[@project]", null);
-            String mappingSet = node.getString("[@mappingSet]", null);
-            String publicationType = node.getString("[@publicationType]", null);
-            String structureType = node.getString("[@structureType]", null);
-            int rowStart = node.getInt("[@rowStart]", 2);
-            int rowEnd = node.getInt("[@rowEnd]", 0);
-            String importSetDescription = node.getString("[@importSetDescription]", null);
-            String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
-            boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
-            String eadType = node.getString("[@eadType]", null);
-            String eadFile = node.getString("[@eadFile]", null);
-            String eadNode = node.getString("[@eadNode]", null);
-            importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType, rowStart,
-                    rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode));
-        }
+        try {
+            List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
+            for (HierarchicalConfiguration node : mappings) {
+                String name = node.getString("[@name]", null);
+                String metadataFolder = node.getString("[@metadataFolder]", null);
+                String mediaFolder = node.getString("[@mediaFolder]", null);
+                String workflow = node.getString("[@workflow]", null);
+                String project = node.getString("[@project]", null);
+                String mappingSet = node.getString("[@mappingSet]", null);
+                String publicationType = node.getString("[@publicationType]", null);
+                String structureType = node.getString("[@structureType]", null);
+                int rowStart = node.getInt("[@rowStart]", 2);
+                int rowEnd = node.getInt("[@rowEnd]", 0);
+                String importSetDescription = node.getString("[@importSetDescription]", null);
+                String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
+                boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
+                String eadType = node.getString("[@eadType]", null);
+                String eadFile = node.getString("[@eadFile]", null);
+                String eadNode = node.getString("[@eadNode]", null);
+                importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
+                        rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode));
+            }
 
-        // write a log into the UI
-        updateLog("Configuration successfully read");
+            // write a log into the UI
+            updateLog("Configuration successfully read");
+        } catch (NullPointerException ex) {
+            String logmessage= "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file";
+            importSets = new ArrayList<ImportSet>();
+            log.error(logmessage,ex);
+            LogMessage message = new LogMessage(logmessage, 3);
+            logQueue.add(message);
+            errorList.add(message);
+            successful = false;
+            
+            log.debug(logmessage);
+            if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
+                lastPush = System.currentTimeMillis();
+                pusher.send("update");
+            }
+        }
     }
 
     /**
@@ -375,7 +383,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             eadManager = new EadManager(importSet, process.getTitel());
                             if (eadManager.isDbStatusOk()) {
                                 eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
-                            }else {
+                            } else {
                                 updateLogAndProcess(process.getId(), "Couldn't open baseX-DB, no EAD-Entries were generated for this process", 3);
                             }
                         }
@@ -436,9 +444,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             }
                             failedImports.add(processFile.getFileName().toString());
                         }
-                        
+
                         //if eadManager was used save Changes
-                        if (eadManager!=null && eadManager.isDbStatusOk()) {
+                        if (eadManager != null && eadManager.isDbStatusOk()) {
                             eadManager.saveArchiveAndLeave();
                         }
                         dManager.saveProcess();
@@ -487,7 +495,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             } catch (InterruptedException | IOException e) {
                 Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
                 log.error("Error trying to execute the import", e);
-                updateLog("Error trying to execute the import: " + e.getMessage(), 3);
+                
             }
 
             pusher.send("summary");

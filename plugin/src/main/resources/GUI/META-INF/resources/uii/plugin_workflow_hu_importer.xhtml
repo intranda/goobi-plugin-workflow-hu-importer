@@ -39,6 +39,10 @@
 	font-weight: bold;
 }
 
+.logTitle {
+	margin-top: 20px;
+}
+
 .logs {
 	border: 1px solid #ddd;
 	display: block;
@@ -97,9 +101,9 @@
 												</div>
 											</h:panelGroup>
 											<!-- // progress bar -->
-
 											<!-- buttons -->
 											<h:panelGroup
+												rendered="#{not empty NavigationForm.workflowPlugin.importSets}"
 												class="#{NavigationForm.workflowPlugin.progress ge 0 ? 'col-sm-4' : 'col-sm-12'}">
 
 												<!-- import button -->
@@ -113,8 +117,9 @@
 															value="#{msgs.plugin_intranda_workflow_hu_import_startImport}" />
 														<span class="caret"></span>
 													</a>
-
+													
 													<ul class="dropdown-menu">
+													
 														<ui:repeat var="importset"
 															value="#{NavigationForm.workflowPlugin.importSets}">
 															<li><button
@@ -152,7 +157,7 @@
 		<h:panelGroup id="logs">
 			<ui:fragment
 				rendered="#{LoginForm.hasRole('Plugin_workflow_hu_importer')}">
-				<h4>#{msgs.plugin_intranda_workflow_hu_import_messageLog}</h4>
+				<h4 class="logTitle">#{msgs.plugin_intranda_workflow_hu_import_messageLog}</h4>
 				<h:panelGroup styleClass="logs">
 					<ui:repeat var="log"
 						value="#{NavigationForm.workflowPlugin.logQueue}">
@@ -167,8 +172,8 @@
 		<!-- summary view -->
 		<h:panelGroup id="summary">
 			<ui:fragment
-				rendered="#{LoginForm.hasRole('Plugin_workflow_hu_importer') and not NavigationForm.workflowPlugin.successful}">
-				<h4>#{msgs.plugin_intranda_workflow_hu_import_errorLog}</h4>
+				rendered="#{LoginForm.hasRole('Plugin_workflow_hu_importer') and not empty NavigationForm.workflowPlugin.errorList }">
+				<h4 class="logTitle">#{msgs.plugin_intranda_workflow_hu_import_errorLog}</h4>
 				<h:panelGroup styleClass="logs">
 					<ui:repeat var="log"
 						value="#{NavigationForm.workflowPlugin.errorList}">

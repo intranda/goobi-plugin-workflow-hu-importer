@@ -235,6 +235,7 @@ public class DocumentManager {
                 break;
             case "FileName":
                 //do nothhing
+                break;
             default:
                 plugin.updateLogAndProcess(process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
                 return;
