@@ -99,6 +99,7 @@ public class EadManager {
     }
 
     public void saveArchiveAndLeave() {
+    	archivePlugin.createEadDocument();
         archivePlugin.saveArchiveAndLeave();
     }
     public void cancelEdition() {
@@ -179,5 +180,33 @@ public class EadManager {
         }
         return false;
     }
+
+	public boolean addSubnodeWithMetaData(Row row, List<MappingField> mappingFields) {
+        String NodeType = importSet.getEadSubnodeType();
+        IEadEntry parent = archivePlugin.getSelectedEntry();
+        if (StringUtils.isBlank(NodeType)) {
+        	return false;
+        }
+        
+		archivePlugin.addNode();
+        IEadEntry entry = archivePlugin.getSelectedEntry();
+        // set the prefered node type for the created node
+        for (INodeType nt : archivePlugin.getConfiguredNodes()) {
+            if (nt.getNodeName().equals(NodeType)) {
+                entry.setNodeType(nt);
+                addMetadata(entry, row, mappingFields);
+                archivePlugin.setSelectedEntry(parent);
+                return true;
+            }
+        }
+        
+        // if node type is invalid delete it
+        archivePlugin.deleteNode();
+        archivePlugin.setSelectedEntry(parent);
+    	return false;
+        //archivePlugin.createEadDocument();
+		// TODO Auto-generated method stub
+		
+	}
 
 }

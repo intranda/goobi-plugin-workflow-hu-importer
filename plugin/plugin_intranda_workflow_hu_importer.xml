@@ -19,7 +19,24 @@
 		[rowEnd] last row that will be read
 	  -->
         <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze)-->
-        <importSet name="Lochkarten EAD" 
+        
+   	<importSet name="Lochkarten EAD Subnodes" 
+		metadataFolder="/opt/digiverso/import/mdvos/" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		workflow="Sample_Workflow"
+		project="Archive_Project" 
+		mappingSet="LochkartenEAD" 
+		publicationType="Trenner"
+		structureType="Lochkarte"
+		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		descriptionMappingSet="Description"
+		eadType="file" 
+		eadFile="EAD-Store - Sudanarchäologie.xml" 
+		eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
+		eadSubnodeType="file"
+	/>
+	
+	<importSet name="Lochkarten EAD" 
 		metadataFolder="/opt/digiverso/import/mdvos/" 
 		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
 		workflow="Sample_Workflow"
@@ -46,7 +63,7 @@
 		descriptionMappingSet="Description"
 		/>
 		
-		<importSet name="LochkartenOhneDescription" 
+	<importSet name="LochkartenOhneDescription" 
 		metadataFolder="/opt/digiverso/import/mdvos/" 
 		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
 		workflow="Sample_Workflow"
@@ -73,7 +90,7 @@
 	<mappingSet name="Lochkarten">
 		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="shelfmarksource"/>
 		<field column="E" label="Institutionsnachweis/ Sammlung" type="metadata" mets="PhysicalLocation"/>
-		<field column="F" label="Titel" type="metadata" mets="TitleDocMain"/>
+		<field column="F" label="Titel" type="metadata" mets="TitleDocMain" ead="unittitle"/>
 		<field column="G" label="Schlagwort" type="metadata" mets="Subject"/> <!--mets="Subject"-->
 		<field column="H" label="Schlagwort" type="metadata" mets="Subject"/>
 		<field column="I" label="Material" type="metadata" mets="FormatSourcePrint"/>
