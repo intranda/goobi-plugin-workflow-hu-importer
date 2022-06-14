@@ -128,8 +128,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String eadType = node.getString("[@eadType]", null);
                 String eadFile = node.getString("[@eadFile]", null);
                 String eadNode = node.getString("[@eadNode]", null);
+                String eadSubnodeType = node.getString("[@eadSubnodeType]",null);
                 importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
-                        rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode));
+                        rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType));
             }
 
             // write a log into the UI
@@ -414,6 +415,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // create the metadata fields by reading the config (and get content from the
                             // content files of course)
                             dManager.createStructureWithMetaData(row, mappingFields, imageFiles);
+                            eadManager.addSubnodeWithMetaData(row,mappingFields);
                         }
                         // close workbook
                         reader.closeWorkbook();
@@ -617,6 +619,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String eadType;
         private String eadFile;
         private String eadNode;
+        private String eadSubnodeType;
     }
 
     @Data
