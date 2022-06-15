@@ -278,13 +278,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
 
                 } catch (IOException e) {
-                    updateLog("Could open File with Path" + importSet.getImportSetDescription(), 3);
+                    updateLog("Could not open File with Path" + importSet.getImportSetDescription(), 3);
+                    updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
+                    return null;
                 }
-            } else {
-                updateLog("A File with Processdescriptions was specified but no DescriptionMappingSet was provided!", 3);
-                updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
-                failedImports.add(processFile.getFileName().toString());
-                return null;
             }
         }
         return new ProcessDescription(null, null, null, processFile.getFileName());
@@ -345,7 +342,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             try {
 
                 if (FilesToRead.size() == 0) {
-                    updateLog("There are no files int the folder: " + importSet.getMetadataFolder(), 3);
+                    updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
                 }
                 for (Path processFile : FilesToRead) {
                     successful = true;
@@ -361,7 +358,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     }
                     updateLog("Datei: " + processFile.toString());
 
-                    //Try to open File if IOException flies here no process will be created
+                    //Try to open File if IOException flies here, no process will be created
                     XlsReader reader = new XlsReader(processFile.toString());
                     Sheet sheet = reader.getSheet();
 
@@ -376,7 +373,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             failedImports.add(processFile.getFileName().toString());
                             continue;
                         }
-                        // create Process
+                        // create Process, DocumentManager and EadManager
                         DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
                         process = dManager.getProcess();
                         EadManager eadManager = null;
@@ -415,7 +412,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // create the metadata fields by reading the config (and get content from the
                             // content files of course)
                             dManager.createStructureWithMetaData(row, mappingFields, imageFiles);
-                            eadManager.addSubnodeWithMetaData(row,mappingFields);
+                            
+                            //only add ead subnodes if a SubnodeType is specified
+                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType())&& eadManager.isDbStatusOk()) {
+                            	eadManager.addSubnodeWithMetaData(row,mappingFields);
+                            }
                         }
                         // close workbook
                         reader.closeWorkbook();

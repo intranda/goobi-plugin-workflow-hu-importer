@@ -25,7 +25,7 @@
 		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
-		mappingSet="LochkartenEAD" 
+		mappingSet="Lochkarten" 
 		publicationType="Trenner"
 		structureType="Lochkarte"
 		importSetDescription="/opt/digiverso/import/description/description.xlsx"
