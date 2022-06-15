@@ -202,6 +202,7 @@ public class EadManager {
 		for (INodeType nt : archivePlugin.getConfiguredNodes()) {
 			if (nt.getNodeName().equals(NodeType)) {
 				entry.setNodeType(nt);
+				entry.setGoobiProcessTitle(processName);
 				addMetadata(entry, row, mappingFields);
 				archivePlugin.setSelectedEntry(parent);
 				return true;
