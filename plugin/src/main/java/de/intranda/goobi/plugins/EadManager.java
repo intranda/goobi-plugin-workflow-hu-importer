@@ -85,16 +85,12 @@ public class EadManager {
 		}
 	}
 
-	public void addDocumentNodeWithMetadata(Row row, List<MappingField> mappingFields) {
-		addDocumentNodeWithMetadata(importSet.getEadType(), row, mappingFields);
-	}
-
-	private void addDocumentNodeWithMetadata(String NodeType, Row row, List<MappingField> mappingFields) {
+	public String addDocumentNodeWithMetadata(Row row, List<MappingField> mappingFields) {
 		archivePlugin.addNode();
 		IEadEntry entry = archivePlugin.getSelectedEntry();
 		// set the prefered node type for the created node
 		for (INodeType nt : archivePlugin.getConfiguredNodes()) {
-			if (nt.getNodeName().equals(NodeType)) {
+			if (nt.getNodeName().equals(importSet.getEadType())) {
 				entry.setNodeType(nt);
 			}
 		}
@@ -102,7 +98,7 @@ public class EadManager {
 		addMetadata(entry, row, mappingFields);
 		entry.setGoobiProcessTitle(processName);
 		archivePlugin.createEadDocument();
-
+		return entry.getId();
 	}
 
 	public void saveArchiveAndLeave() {
@@ -189,11 +185,11 @@ public class EadManager {
 		return false;
 	}
 
-	public boolean addSubnodeWithMetaData(Row row, List<MappingField> mappingFields) {
+	public String addSubnodeWithMetaData(Row row, List<MappingField> mappingFields) {
 		String NodeType = importSet.getEadSubnodeType();
 		IEadEntry parent = archivePlugin.getSelectedEntry();
 		if (StringUtils.isBlank(NodeType)) {
-			return false;
+			return null;
 		}
 
 		archivePlugin.addNode();
@@ -205,14 +201,14 @@ public class EadManager {
 				entry.setGoobiProcessTitle(processName);
 				addMetadata(entry, row, mappingFields);
 				archivePlugin.setSelectedEntry(parent);
-				return true;
+				return entry.getId();
 			}
 		}
 
 		// if node type is invalid delete it
 		archivePlugin.deleteNode();
 		archivePlugin.setSelectedEntry(parent);
-		return false;
+		return null;
 	}
 
 }

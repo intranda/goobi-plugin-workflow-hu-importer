@@ -144,6 +144,17 @@ public class DocumentManager {
             throw new ProcessCreationException(ex);
         }
     }
+    
+    public void addNodeIdToTopStruct(String nodeId) throws MetadataTypeNotAllowedException {
+    	addNodeId(logical,nodeId);
+    }
+    private void addNodeId(DocStruct ds, String nodeId) throws MetadataTypeNotAllowedException {
+    	if (StringUtils.isNotBlank(nodeId)) {
+    		Metadata nodeid = new Metadata(prefs.getMetadataTypeByName("NodeId"));
+            nodeid.setValue(nodeId);
+			ds.addMetadata(nodeid);
+    	}
+    }
 
     public void addMetaDataToTopStruct(MappingField mappingField, String cellContent)
             throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
@@ -152,7 +163,6 @@ public class DocumentManager {
 
     public void addMetadataToStructure(MappingField mappingField, String cellContent)
             throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-
         addMetadata(structure, mappingField, cellContent);
     }
 
@@ -160,11 +170,7 @@ public class DocumentManager {
         structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(strucType));
     }
 
-    public void addStructureToLogical() throws TypeNotAllowedAsChildException {
-        logical.addChild(structure);
-    }
-
-    public void createStructureWithMetaData(Row row, List<MappingField> mappingFields, Set<Path> imageFiles)
+    public void createStructureWithMetaData(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
             throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, IOException, InterruptedException, SwapException, DAOException {
         createStructure(importSet.getStructureType());
         for (MappingField mappingField : mappingFields) {
@@ -184,7 +190,12 @@ public class DocumentManager {
                 }
             }
         }
-        addStructureToLogical();
+        try {
+			addNodeId(structure,nodeId);
+		} catch (MetadataTypeNotAllowedException e) {
+			plugin.updateLogAndProcess(process.getId(),"Metadata field definition for nodeId is missing in the structure type (needed to link document with ead-nodes)! Please update the ruleset.", 3);
+		}
+        logical.addChild(structure);
     }
 
     public void saveProcess() throws DAOException {

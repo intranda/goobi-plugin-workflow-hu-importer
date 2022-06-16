@@ -377,10 +377,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
                         process = dManager.getProcess();
                         EadManager eadManager = null;
+                        String nodeId=null;
                         if (StringUtils.isNotBlank(importSet.getEadFile())) {
                             eadManager = new EadManager(importSet, process.getTitel());
                             if (eadManager.isDbStatusOk()) {
-                                eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
+                                nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                             } else {
                                 updateLogAndProcess(process.getId(), "Couldn't open baseX-DB, no EAD-Entries were generated for this process", 3);
                             }
@@ -398,6 +399,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                             + importSet.getDescriptionMappingSet(), 3);
                                 }
                             }
+                            try {
+								dManager.addNodeIdToTopStruct(nodeId);
+							} catch (MetadataTypeNotAllowedException e) {
+                                updateLog("Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.", 3);
+							}
                         }
                         // Initialize PageCount
                         int PageCount = 0;
@@ -405,18 +411,20 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // skip rows until start row
                             if (row.getRowNum() < importSet.getRowStart() - 1)
                                 continue;
+                            String subnodeId =null;
+                            //only add ead subnodes if a SubnodeType is specified
+                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType())&& eadManager.isDbStatusOk()) {
+                            	subnodeId = eadManager.addSubnodeWithMetaData(row,mappingFields);
+                            }
                             // end parsing after end row number
                             if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd())
                                 break;
 
                             // create the metadata fields by reading the config (and get content from the
                             // content files of course)
-                            dManager.createStructureWithMetaData(row, mappingFields, imageFiles);
+                            dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
                             
-                            //only add ead subnodes if a SubnodeType is specified
-                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType())&& eadManager.isDbStatusOk()) {
-                            	eadManager.addSubnodeWithMetaData(row,mappingFields);
-                            }
+
                         }
                         // close workbook
                         reader.closeWorkbook();
