@@ -314,7 +314,7 @@ public class DocumentManager {
 
             dsPage.addContentFile(cf);
             if (PageCount % 10 == 0) {
-                plugin.updateLog("Created " + PageCount + "physical Pages for Process with Id: " + process.getId());
+                plugin.updateLog("Created " + PageCount + " physical Pages for Process with Id: " + process.getId());
             }
             return true;
         } catch (TypeNotAllowedAsChildException | TypeNotAllowedForParentException e) {
