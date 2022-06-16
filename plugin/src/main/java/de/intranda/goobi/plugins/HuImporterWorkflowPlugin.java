@@ -262,8 +262,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         }
                     }
                     if (processDescriptionRow == null) {
-                        updateLog("A File with Processdescriptions was specified but the Filename(" + processFile.getFileName().toString()
-                                + "was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
+                        updateLog("A File with Processdescriptions was specified but the Filename (" + processFile.getFileName().toString()
+                                + ") was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
                         updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
                         failedImports.add(processFile.getFileName().toString());
                         reader.closeWorkbook();
@@ -278,7 +278,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
 
                 } catch (IOException e) {
-                    updateLog("Could not open File with Path" + importSet.getImportSetDescription(), 3);
+                    updateLog("Could not open File with Path: " + importSet.getImportSetDescription(), 3);
                     updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
                     return null;
                 }
