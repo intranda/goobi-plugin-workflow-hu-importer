@@ -136,7 +136,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // write a log into the UI
             updateLog("Configuration successfully read");
         } catch (NullPointerException ex) {
-            String logmessage= "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file";
+            String logmessage= "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file.";
             importSets = new ArrayList<ImportSet>();
             log.error(logmessage,ex);
             LogMessage message = new LogMessage(logmessage, 3);
@@ -348,7 +348,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     successful = true;
                     ProcessDescription processDescription = getProcessDescription(importSet, processFile);
                     if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
-                        updateLog("A importSetDescription was configured but there were Errors getting the Description", 3);
+                        updateLog("A importSetDescription was configured but there were Errors getting the Description!", 3);
                         continue;
                     }
 
@@ -383,7 +383,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             if (eadManager.isDbStatusOk()) {
                                 nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                             } else {
-                                updateLogAndProcess(process.getId(), "Couldn't open baseX-DB, no EAD-Entries were generated for this process", 3);
+                                updateLogAndProcess(process.getId(), "Couldn't open baseX-DB, no EAD-Entries were generated for this process!", 3);
                             }
                         }
                         this.prefs = dManager.getPrefs();
@@ -430,7 +430,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         reader.closeWorkbook();
                         // write the metsfile
                         dManager.writeMetadataFile();
-                        updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID:" + process.getId(), 1);
+                        updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID: " + process.getId(), 1);
                         if (successful) {
                             // start any open automatic tasks for the created process
                             for (Step s : process.getSchritteList()) {
@@ -471,10 +471,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                         String message = (process != null) ? "Error mapping and importing data during the import of process: "
                                 : "Error creating a process during import";
-                        message = message + process.getTitel() + " " + e.getMessage();
+                        
 
                         log.error("Error  during the import for process", e);
                         if (process != null) {
+                        	message = message + process.getTitel() + " " + e.getMessage();
                             updateLogAndProcess(process.getId(), message, 3);
                             try {
                                 ProcessManager.saveProcess(process);
@@ -482,6 +483,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                                 e1.printStackTrace();
                             }
+                        }else {
+                        	updateLog(message, 3);
                         }
                     }
 

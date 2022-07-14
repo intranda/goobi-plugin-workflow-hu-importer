@@ -185,7 +185,7 @@ public class DocumentManager {
                         addMetadataToStructure(mappingField, cellContent);
                     } catch (MetadataTypeNotAllowedException e) {
                         plugin.updateLogAndProcess(process.getId(),
-                                "Invalid Mapping for Field " + mappingField.getType() + " in MappingSet " + importSet.getMapping(), 3);
+                                "Invalid Mapping for Field " + mappingField.getType() + " in MappingSet " + importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
                     }
                 }
             }
