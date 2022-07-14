@@ -5,7 +5,7 @@
   <version>1.0.0</version>
   <packaging>pom</packaging>
   <properties>
-    <goobi.version>22.04.5</goobi.version>
+    <goobi.version>22.06</goobi.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <distributionManagement>
@@ -30,7 +30,7 @@
       <artifactId>goobi-core-jar</artifactId>
       <version>${goobi.version}</version>
     </dependency>
-     <dependency>
+    <dependency>
       <groupId>de.intranda.goobi.plugins.administration</groupId>
       <artifactId>archive-management-gui</artifactId>
       <version>1.1.3</version>
