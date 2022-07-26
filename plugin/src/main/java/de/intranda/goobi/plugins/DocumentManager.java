@@ -108,7 +108,6 @@ public class DocumentManager {
 
             DocStruct logic = dd.createDocStruct(this.prefs.getDocStrctTypeByName(importSet.getPublicationType()));
             dd.setLogicalDocStruct(logic);
-            MetadataType MDTypeForPath = this.prefs.getMetadataTypeByName("pathimagefiles");
 
             // save the process
             Process process = bhelp.createAndSaveNewProcess(template, processname, ff);
@@ -144,16 +143,17 @@ public class DocumentManager {
             throw new ProcessCreationException(ex);
         }
     }
-    
+
     public void addNodeIdToTopStruct(String nodeId) throws MetadataTypeNotAllowedException {
-    	addNodeId(logical,nodeId);
+        addNodeId(logical, nodeId);
     }
+
     private void addNodeId(DocStruct ds, String nodeId) throws MetadataTypeNotAllowedException {
-    	if (StringUtils.isNotBlank(nodeId)) {
-    		Metadata nodeid = new Metadata(prefs.getMetadataTypeByName("NodeId"));
+        if (StringUtils.isNotBlank(nodeId)) {
+            Metadata nodeid = new Metadata(prefs.getMetadataTypeByName("NodeId"));
             nodeid.setValue(nodeId);
-			ds.addMetadata(nodeid);
-    	}
+            ds.addMetadata(nodeid);
+        }
     }
 
     public void addMetaDataToTopStruct(MappingField mappingField, String cellContent)
@@ -184,22 +184,33 @@ public class DocumentManager {
                     try {
                         addMetadataToStructure(mappingField, cellContent);
                     } catch (MetadataTypeNotAllowedException e) {
-                        plugin.updateLogAndProcess(process.getId(),
-                                "Invalid Mapping for Field " + mappingField.getType() + " in MappingSet " + importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
+                        plugin.updateLogAndProcess(process.getId(), "Invalid Mapping for Field " + mappingField.getType() + " in MappingSet "
+                                + importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
                     }
                 }
             }
         }
         try {
-			addNodeId(structure,nodeId);
-		} catch (MetadataTypeNotAllowedException e) {
-			plugin.updateLogAndProcess(process.getId(),"Metadata field definition for nodeId is missing in the structure type (needed to link document with ead-nodes)! Please update the ruleset.", 3);
-		}
+            addNodeId(structure, nodeId);
+        } catch (MetadataTypeNotAllowedException e) {
+            plugin.updateLogAndProcess(process.getId(),
+                    "Metadata field definition for nodeId is missing in the structure type (needed to link document with ead-nodes)! Please update the ruleset.",
+                    3);
+        }
         logical.addChild(structure);
     }
 
     public void saveProcess() throws DAOException {
         ProcessManager.saveProcess(process);
+    }
+
+    private Person createPerson(String cellContent, MappingField mappingField) throws MetadataTypeNotAllowedException {
+        Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
+        String firstname = cellContent.substring(0, cellContent.indexOf(" "));
+        String lastname = cellContent.substring(cellContent.indexOf(" "));
+        p.setFirstname(firstname);
+        p.setLastname(lastname);
+        return p;
     }
 
     /**
@@ -218,6 +229,22 @@ public class DocumentManager {
     public void addMetadata(DocStruct ds, MappingField mappingField, String cellContent)
             throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
         switch (mappingField.getType()) {
+            case "personWithGnd":
+                if (StringUtils.isBlank(mappingField.getMets())) {
+                    if (StringUtils.isBlank(mappingField.getEad())) {
+                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
+                    }
+
+                    return;
+                }
+                String gnd = cellContent.substring(cellContent.lastIndexOf(mappingField.getSeparator())+1).trim();
+                String fullName = cellContent.substring(0, cellContent.lastIndexOf(mappingField.getSeparator())).trim();
+                fullName = fullName.replaceAll(mappingField.getSeparator(), " ").trim();
+                Person p1 = createPerson(fullName, mappingField);
+                p1.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
+                ds.addPerson(p1);
+                plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
+                break;
             case "person":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
@@ -226,11 +253,7 @@ public class DocumentManager {
                     return;
                 }
                 plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
-                Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
-                String firstname = cellContent.substring(0, cellContent.indexOf(" "));
-                String lastname = cellContent.substring(cellContent.indexOf(" "));
-                p.setFirstname(firstname);
-                p.setLastname(lastname);
+                Person p = createPerson(cellContent, mappingField);
                 ds.addPerson(p);
                 break;
             case "metadata":
