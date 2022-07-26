@@ -20,31 +20,31 @@
 	  -->
         <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze)-->
         
-   	<importSet name="Lochkarten EAD Subnodes" 
-		metadataFolder="/opt/digiverso/import/mdvos/" 
-		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+<importSet name="Lochkarten EAD Subnodes" 
+		metadataFolder="/opt/digiverso/import/mdvos/Sudan" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Sudan/Bilder" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
 		mappingSet="Lochkarten" 
-		publicationType="Trenner"
-		structureType="Lochkarte"
-		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		publicationType="Divider"
+		structureType="PunchCard"
+		importSetDescription="/opt/digiverso/import/mdvos/Beschreibungen/Sudan.xlsx"
 		descriptionMappingSet="Description"
-		eadType="file" 
+		eadType="folder" 
 		eadFile="EAD-Store - Sudanarchäologie.xml" 
 		eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
 		eadSubnodeType="file"
-	/>
+		/>
 	
-	<importSet name="Lochkarten EAD" 
-		metadataFolder="/opt/digiverso/import/mdvos/" 
-		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+        <importSet name="Lochkarten EAD" 
+		metadataFolder="/opt/digiverso/import/mdvos/Sudan" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Sudan/Bilder" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
 		mappingSet="Lochkarten" 
-		publicationType="Trenner"
-		structureType="Lochkarte"
-		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		publicationType="Divider"
+		structureType="PunchCard"
+		importSetDescription="/opt/digiverso/import/mdvos/Beschreibungen/Sudan.xlsx"
 		descriptionMappingSet="Description"
 		eadType="file" 
 		eadFile="EAD-Store - Sudanarchäologie.xml" 
@@ -52,25 +52,25 @@
 		/>
 		
 	<importSet name="Lochkarten" 
-		metadataFolder="/opt/digiverso/import/mdvos/" 
-		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		metadataFolder="/opt/digiverso/import/mdvos/Sudan" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Sudan/Bilder" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
 		mappingSet="Lochkarten" 
-		publicationType="Trenner"
-		structureType="Lochkarte"
-		importSetDescription="/opt/digiverso/import/description/description.xlsx"
+		publicationType="Divider"
+		structureType="PunchCard"
+		importSetDescription="/opt/digiverso/import/mdvos/Beschreibungen/Sudan.xlsx"
 		descriptionMappingSet="Description"
 		/>
 		
-	<importSet name="LochkartenOhneDescription" 
-		metadataFolder="/opt/digiverso/import/mdvos/" 
-		mediaFolder ="/opt/digiverso/import/mdvos/Lochkartei_Testdaten" 
+		<importSet name="LochkartenOhneDescription" 
+		metadataFolder="/opt/digiverso/import/mdvos/Sudan" 
+		mediaFolder ="/opt/digiverso/import/mdvos/Sudan/Bilder" 
 		workflow="Sample_Workflow"
 		project="Archive_Project" 
 		mappingSet="Lochkarten" 
-		publicationType="Trenner"
-		structureType="Lochkarte"
+		publicationType="Divider"
+		structureType="PunchCard"
 		useFileNameAsProcessTitle="true"
 		/>
 	<!-- mapping set -> set of fields that describe a mapping
@@ -87,26 +87,57 @@
         [blankAfterSeparator]: default value is false
         [ead] name of the ead metadata type
 	-->
-	<mappingSet name="Lochkarten">
+<mappingSet name="Lochkarten">
+		<!-- TODO: Clarify -->
 		<field column="D" label="Inventar-Nr./Signatur" type="metadata" mets="shelfmarksource"/>
-		<field column="E" label="Institutionsnachweis/ Sammlung" type="metadata" mets="PhysicalLocation"/>
+		<!-- TODO: Clarify
+			commented out because HostInstitution is a complex Type like Person
+			we would need to add a Type for it
+		<field column="E" label="Institutionsnachweis/ Sammlung" type="metadata" mets="HostInstitution"/>
+		-->
+		<!-- TODO: Clarify -->
 		<field column="F" label="Titel" type="metadata" mets="TitleDocMain" ead="unittitle"/>
-		<field column="G" label="Schlagwort" type="metadata" mets="Subject"/> <!--mets="Subject"-->
-		<field column="H" label="Schlagwort" type="metadata" mets="Subject"/>
-		<field column="I" label="Material" type="metadata" mets="FormatSourcePrint"/>
-		<field column="J" label="Maße" type="metadata" mets="SizeSourcePrint"/>
-		<field column="K" label="Trenner" type="metadata" mets="OtherTitle"/>
-		<field column="L" label="Geokoordinaten" type="metadata" mets=""/>
+		<!-- TODO: Clarify -->
+		<field column="G" label="Schlagwort" type="metadata" mets="SubjectTopic"/>
+		<!-- TODO: Clarify -->
+		<field column="H" label="Schlagwort" type="metadata" mets="SubjectTopic"/>
+		<!-- TODO: Clarify -->
+		<field column="I" label="Material" type="metadata" mets="MaterialDescription"/>
+		<!-- TODO: Clarify -->
+		<field column="J" label="Maße" type="metadata" mets="FormatSourcePrint"/>
+		<!-- TODO: Clarify -->
+		<!-- 
+			commented out because Referenced Work is a group
+		<field column="K" label="Trenner" type="metadata" mets="ReferencedWork"/>
+		-->
+		<!-- TODO: Clarify -->
+		<field column="L" label="Geokoordinaten" type="metadata" mets="SubjectGeographic"/>
 		
 		
-		<field column="M,N" label="Datei recto" type="metadata" mets="IdentifierRelatedWork"/>
-		<field column="M,N" label="Datei recto" type="media" mets="IdentifierRelatedWork"/>
+		<!-- TODO: Clarify -->
+		<!-- commented out because Referenced Work is a group
+		<field column="M,N" label="Datei recto" type="metadata" mets="ReferencedWork"/>
+		-->
+		<!-- type media does not support a mets attribute -->
+		<field column="M,N" label="Datei recto" type="media"/>
+		
 	</mappingSet>
 	
 	<mappingSet name="Description">
+		<!-- TODO: Clarify -->
 		<field column="A" label="Dateiname" type="FileName" />
+		<!-- TODO: Clarify -->
 		<field column="B" label="Titel" type="metadata" mets="TitleDocMain"  ead="unittitle"/>
+		<!-- TODO: Clarify -->
 		<field column="D" label="Prozessname" type="ProcessName"/>
+		<!-- TODO: Clarify -->
 		<field column="E" label="Date" type="metadata" ead="unitdate" />
+		<!-- added for testing purposes 
+			currently there is no metadata entry of type person configured for
+			the element type trenner ... you may have to add one to test this
+		
+		<field column="F,G" label="PersonAndGID" type="personWithGnd" mets="OtherPerson"/>
+		<field column="I,H,J" label="Name,Prename and GND in different Cells" type="personWithGnd" mets="OtherPerson"/>
+		-->
 	</mappingSet>
 </config_plugin>
