@@ -237,11 +237,19 @@ public class DocumentManager {
 
                     return;
                 }
-                String gnd = cellContent.substring(cellContent.lastIndexOf(mappingField.getSeparator())+1).trim();
-                String fullName = cellContent.substring(0, cellContent.lastIndexOf(mappingField.getSeparator())).trim();
-                fullName = fullName.replaceAll(mappingField.getSeparator(), " ").trim();
-                Person p1 = createPerson(fullName, mappingField);
-                p1.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
+                String gnd = cellContent.substring(cellContent.lastIndexOf(mappingField.getSeparator()) + 1).trim();
+                Person p1;
+                String fullName;
+                if (gnd.matches("\\d+")) {
+                    fullName = cellContent.substring(0, cellContent.lastIndexOf(mappingField.getSeparator())).trim();
+                    fullName = fullName.replaceAll(mappingField.getSeparator(), " ").trim();
+                    p1 = createPerson(fullName, mappingField);
+                    p1.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
+                } else {
+                    fullName = cellContent.replaceAll(mappingField.getSeparator(), " ").trim();
+                    p1 = createPerson(fullName,mappingField);
+                    plugin.updateLogAndProcess(process.getId(), "Couldn't add GID because there was none provided as last column, added normal Person instead! mets: "+mappingField.getMets(),3);
+                }
                 ds.addPerson(p1);
                 plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
                 break;

@@ -73,11 +73,11 @@ public class XlsReader {
      * Read content from excel cell as String
      * 
      * @param row
-     * @param cellname
+     * @param columnName
      * @return
      */
-    public static String getCellContentSplit(Row row, String cellname) {
-        Cell cell = row.getCell(CellReference.convertColStringToIndex(cellname));
+    public static String getCellContentSplit(Row row, String columnName) {
+        Cell cell = row.getCell(CellReference.convertColStringToIndex(columnName));
         if (cell != null) {
             DataFormatter dataFormatter = new DataFormatter();
             return dataFormatter.formatCellValue(cell).trim();
