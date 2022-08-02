@@ -74,8 +74,9 @@ public class DocumentManager {
         String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
 
         // if processname field was empty use filename UUID
-        if (StringUtils.isBlank(processname))
+        if (StringUtils.isBlank(processname)) {
             processname = UUID.randomUUID().toString();
+        }
 
         // if UseAsProcessTitle is set use Filename as ProcessTitle
         if (importSet.isUseFileNameAsProcessTitle()) {
@@ -138,8 +139,8 @@ public class DocumentManager {
             imagePath.setValue(process.getImagesDirectory());
             this.physical.addMetadata(imagePath);
 
-        } catch (PreferencesException | TypeNotAllowedForParentException | ReadException | WriteException | IOException | InterruptedException
-                | SwapException | DAOException | MetadataTypeNotAllowedException | DocStructHasNoTypeException ex) {
+        } catch (PreferencesException | TypeNotAllowedForParentException | ReadException | IOException | SwapException
+                | MetadataTypeNotAllowedException | DocStructHasNoTypeException ex) {
             throw new ProcessCreationException(ex);
         }
     }
@@ -247,8 +248,11 @@ public class DocumentManager {
                     p1.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
                 } else {
                     fullName = cellContent.replaceAll(mappingField.getSeparator(), " ").trim();
-                    p1 = createPerson(fullName,mappingField);
-                    plugin.updateLogAndProcess(process.getId(), "Couldn't add GID because there was none provided as last column, added normal Person instead! mets: "+mappingField.getMets(),3);
+                    p1 = createPerson(fullName, mappingField);
+                    plugin.updateLogAndProcess(process.getId(),
+                            "Couldn't add GID because there was none provided as last column, added normal Person instead! mets: "
+                                    + mappingField.getMets(),
+                                    3);
                 }
                 ds.addPerson(p1);
                 plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
@@ -294,8 +298,9 @@ public class DocumentManager {
                 plugin.updateLogAndProcess(process.getId(), "Couldn't find the following file: " + importSet.getMediaFolder() + imageFileName, 3);
             } else {
                 Path masterFolder = Paths.get(process.getImagesOrigDirectory(false));
-                if (!storageProvider.isFileExists(masterFolder))
+                if (!storageProvider.isFileExists(masterFolder)) {
                     storageProvider.createDirectories(masterFolder);
+                }
                 if (Files.isReadable(imageFile)) {
                     storageProvider.copyFile(imageFile, Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
                     if (!addPage(structure, imageFile.toFile())) {
