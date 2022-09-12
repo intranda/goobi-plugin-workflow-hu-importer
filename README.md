@@ -15,8 +15,8 @@ Detail | Description
 **Plugin identifier**       | intranda_workflow_hu_importer
 **Plugin type**             | Workflow plugin
 **Licence**                 | GPL 2.0 or newer  
-**Documentation (German)**  | - no documentation available -
-**Documentation (English)** | - no documentation available -
+**Documentation (German)**  | https://docs.goobi.io/goobi-workflow-plugins-de/workflow/intranda_workflow_hu_importer
+**Documentation (English)** | https://docs.goobi.io/goobi-workflow-plugins-en/workflow/intranda_workflow_hu_importer
 
 ## Goobi details
 
