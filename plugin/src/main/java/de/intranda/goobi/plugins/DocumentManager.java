@@ -179,8 +179,8 @@ public class DocumentManager {
             String cellContent = XlsReader.getCellContent(row, mappingField);
 
             if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
-                if (mappingField.getType().trim().equals("media")) {
-                    addMediaFile(cellContent, imageFiles);
+                if ("media".equals(mappingField.getType().trim())) {
+                    addMediaFile(mappingField, cellContent, imageFiles);
                 } else {
                     try {
                         addMetadataToStructure(mappingField, cellContent);
@@ -252,7 +252,7 @@ public class DocumentManager {
                     plugin.updateLogAndProcess(process.getId(),
                             "Couldn't add GID because there was none provided as last column, added normal Person instead! mets: "
                                     + mappingField.getMets(),
-                                    3);
+                            3);
                 }
                 ds.addPerson(p1);
                 plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
@@ -260,7 +260,7 @@ public class DocumentManager {
             case "person":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
-                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
+                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the mapping " + importSet.getMapping(), 3);
                     }
                     return;
                 }
@@ -271,7 +271,7 @@ public class DocumentManager {
             case "metadata":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
-                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
+                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the mapping " + importSet.getMapping(), 3);
                     }
                     return;
                 }
@@ -288,11 +288,13 @@ public class DocumentManager {
         }
     }
 
-    public void addMediaFile(String cellContent, Set<Path> imageFiles)
-            throws IOException, InterruptedException, SwapException, DAOException, TypeNotAllowedForParentException, TypeNotAllowedAsChildException {
+    public void addMediaFile(MappingField mappingField, String cellContent, Set<Path> imageFiles) throws IOException, SwapException, DAOException {
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
-        String[] imageFileNames = cellContent.split(",");
+        String[] imageFileNames = cellContent.split(mappingField.getSeparator());
         for (String imageFileName : imageFileNames) {
+            if (StringUtils.isBlank(imageFileName)) {
+                continue;
+            }
             Path imageFile = imageFiles.stream().filter(path -> path.getFileName().toString().equals(imageFileName.trim())).findFirst().orElse(null);
             if (imageFile == null) {
                 plugin.updateLogAndProcess(process.getId(), "Couldn't find the following file: " + importSet.getMediaFolder() + imageFileName, 3);
@@ -304,7 +306,7 @@ public class DocumentManager {
                 if (Files.isReadable(imageFile)) {
                     storageProvider.copyFile(imageFile, Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
                     if (!addPage(structure, imageFile.toFile())) {
-                        plugin.updateLogAndProcess(process.getId(), "Couldn't add Page to Structure", 3);
+                        plugin.updateLogAndProcess(process.getId(), "Couldn't add page to structure", 3);
                     }
 
                 } else {
