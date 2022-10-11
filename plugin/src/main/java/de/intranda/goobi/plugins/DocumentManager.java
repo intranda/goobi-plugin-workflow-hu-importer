@@ -167,13 +167,24 @@ public class DocumentManager {
         addMetadata(structure, mappingField, cellContent);
     }
 
-    public void createStructure(String strucType) throws TypeNotAllowedForParentException {
-        structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(strucType));
+    public void createStructure(String structType) throws TypeNotAllowedForParentException {
+        structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(structType));
     }
 
     public void createStructureWithMetaData(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
             throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, IOException, InterruptedException, SwapException, DAOException {
-        createStructure(importSet.getStructureType());
+        // look if structureType is defined in table
+        MappingField mFieldStructureType =
+                mappingFields.stream().filter(mappingField -> "structureType".equals(mappingField.getType())).findFirst().orElse(null);
+        String structureType = importSet.getStructureType();
+        if (mFieldStructureType != null) {
+            String cellContentType = XlsReader.getCellContent(row, mFieldStructureType);
+            if (StringUtils.isNotEmpty(cellContentType)) {
+                structureType = cellContentType;
+            }
+        }
+        createStructure(structureType);
+
         for (MappingField mappingField : mappingFields) {
 
             String cellContent = XlsReader.getCellContent(row, mappingField);
@@ -227,7 +238,7 @@ public class DocumentManager {
      * @throws MetadataTypeNotAllowedException
      * @throws TypeNotAllowedAsChildException
      */
-    public void addMetadata(DocStruct ds, MappingField mappingField, String cellContent)
+    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent)
             throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
         switch (mappingField.getType()) {
             case "personWithGnd":
@@ -282,13 +293,16 @@ public class DocumentManager {
             case "FileName":
                 //do nothhing
                 break;
+            case "structureType":
+                //do nothing
+                break;
             default:
                 plugin.updateLogAndProcess(process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
                 return;
         }
     }
 
-    public void addMediaFile(MappingField mappingField, String cellContent, Set<Path> imageFiles) throws IOException, SwapException, DAOException {
+    private void addMediaFile(MappingField mappingField, String cellContent, Set<Path> imageFiles) throws IOException, SwapException, DAOException {
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         String[] imageFileNames = cellContent.split(mappingField.getSeparator());
         for (String imageFileName : imageFileNames) {
