@@ -238,15 +238,17 @@ public class DocumentManager {
      * @throws MetadataTypeNotAllowedException
      * @throws TypeNotAllowedAsChildException
      */
-    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent)
-            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent) throws MetadataTypeNotAllowedException {
         switch (mappingField.getType()) {
             case "personWithGnd":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
                         plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
                     }
-
+                    return;
+                }
+                if (StringUtils.isBlank(cellContent)) {
+                    plugin.updateLogAndProcess(process.getId(), "No content to create Person was provided in Column " + mappingField.getColumn(), 3);
                     return;
                 }
                 String gnd = cellContent.substring(cellContent.lastIndexOf(mappingField.getSeparator()) + 1).trim();
@@ -288,7 +290,12 @@ public class DocumentManager {
                 }
                 Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
                 md.setValue(cellContent);
-                ds.addMetadata(md);
+                try {
+                    ds.addMetadata(md);
+                } catch (DocStructHasNoTypeException ex) {
+                    plugin.updateLogAndProcess(process.getId(),
+                            "DocStruct has no type! This may happen if you specified an invalid type (i.e. Chapter) for sub elements", 3);
+                }
                 break;
             case "FileName":
                 //do nothhing
