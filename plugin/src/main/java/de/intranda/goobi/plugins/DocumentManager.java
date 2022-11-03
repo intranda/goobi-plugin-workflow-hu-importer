@@ -285,7 +285,12 @@ public class DocumentManager {
                 if (mappingField.getGndColumn() != null) {
                     setAuthorityFile(md, gndUri);
                 }
-                ds.addMetadata(md);
+                try {
+                    ds.addMetadata(md);
+                } catch (DocStructHasNoTypeException ex) {
+                    plugin.updateLogAndProcess(process.getId(),
+                            "DocStruct has no type! This may happen if you specified an invalid type (i.e. Chapter) for sub elements", 3);
+                }
                 break;
             case "FileName":
                 //do nothhing
