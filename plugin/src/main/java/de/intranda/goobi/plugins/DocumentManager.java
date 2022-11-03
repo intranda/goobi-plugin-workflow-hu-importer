@@ -157,14 +157,14 @@ public class DocumentManager {
         }
     }
 
-    public void addMetaDataToTopStruct(MappingField mappingField, String cellContent)
+    public void addMetaDataToTopStruct(MappingField mappingField, String cellContent, String gndUri)
             throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-        addMetadata(logical, mappingField, cellContent);
+        addMetadata(logical, mappingField, cellContent, gndUri);
     }
 
-    public void addMetadataToStructure(MappingField mappingField, String cellContent)
+    public void addMetadataToStructure(MappingField mappingField, String cellContent, String gndUri)
             throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-        addMetadata(structure, mappingField, cellContent);
+        addMetadata(structure, mappingField, cellContent, gndUri);
     }
 
     public void createStructure(String structType) throws TypeNotAllowedForParentException {
@@ -188,13 +188,16 @@ public class DocumentManager {
         for (MappingField mappingField : mappingFields) {
 
             String cellContent = XlsReader.getCellContent(row, mappingField);
-
+            String gndUri = null;
+            if (StringUtils.isNotBlank(mappingField.getGndColumn())) {
+                gndUri = XlsReader.getCellContentSplit(row, mappingField.getGndColumn());
+            }
             if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
                 if ("media".equals(mappingField.getType().trim())) {
                     addMediaFile(mappingField, cellContent, imageFiles);
                 } else {
                     try {
-                        addMetadataToStructure(mappingField, cellContent);
+                        addMetadataToStructure(mappingField, cellContent, gndUri);
                     } catch (MetadataTypeNotAllowedException e) {
                         plugin.updateLogAndProcess(process.getId(), "Invalid Mapping for Field " + mappingField.getType() + " in MappingSet "
                                 + importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
@@ -218,10 +221,25 @@ public class DocumentManager {
 
     private Person createPerson(String cellContent, MappingField mappingField) throws MetadataTypeNotAllowedException {
         Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
-        String firstname = cellContent.substring(0, cellContent.indexOf(" "));
-        String lastname = cellContent.substring(cellContent.indexOf(" "));
-        p.setFirstname(firstname);
-        p.setLastname(lastname);
+        int index = cellContent.indexOf(mappingField.getSeparator());
+        String firstpart;
+        String lastpart;
+        if (index > 0) {
+            firstpart = cellContent.substring(0, index).trim();
+            lastpart = cellContent.substring(index + 1).trim();
+
+            if (" ".equals(mappingField.getSeparator())) {
+                // should handle names like : Theodor Fontane
+                p.setFirstname(firstpart);
+                p.setLastname(lastpart);
+            } else {
+                // should handle names like : Fontane, Theodor
+                p.setFirstname(lastpart);
+                p.setLastname(firstpart);
+            }
+        } else {
+            p.setLastname(cellContent);
+        }
         return p;
     }
 
@@ -238,36 +256,9 @@ public class DocumentManager {
      * @throws MetadataTypeNotAllowedException
      * @throws TypeNotAllowedAsChildException
      */
-    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent)
+    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent, String gndUri)
             throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
         switch (mappingField.getType()) {
-            case "personWithGnd":
-                if (StringUtils.isBlank(mappingField.getMets())) {
-                    if (StringUtils.isBlank(mappingField.getEad())) {
-                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the Mapping " + importSet.getMapping(), 3);
-                    }
-
-                    return;
-                }
-                String gnd = cellContent.substring(cellContent.lastIndexOf(mappingField.getSeparator()) + 1).trim();
-                Person p1;
-                String fullName;
-                if (gnd.matches("\\d+")) {
-                    fullName = cellContent.substring(0, cellContent.lastIndexOf(mappingField.getSeparator())).trim();
-                    fullName = fullName.replaceAll(mappingField.getSeparator(), " ").trim();
-                    p1 = createPerson(fullName, mappingField);
-                    p1.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
-                } else {
-                    fullName = cellContent.replaceAll(mappingField.getSeparator(), " ").trim();
-                    p1 = createPerson(fullName, mappingField);
-                    plugin.updateLogAndProcess(process.getId(),
-                            "Couldn't add GID because there was none provided as last column, added normal Person instead! mets: "
-                                    + mappingField.getMets(),
-                            3);
-                }
-                ds.addPerson(p1);
-                plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
-                break;
             case "person":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
@@ -277,6 +268,9 @@ public class DocumentManager {
                 }
                 plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
                 Person p = createPerson(cellContent, mappingField);
+                if (mappingField.getGndColumn() != null) {
+                    setAuthorityFile(p, gndUri);
+                }
                 ds.addPerson(p);
                 break;
             case "metadata":
@@ -288,6 +282,9 @@ public class DocumentManager {
                 }
                 Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
                 md.setValue(cellContent);
+                if (mappingField.getGndColumn() != null) {
+                    setAuthorityFile(md, gndUri);
+                }
                 ds.addMetadata(md);
                 break;
             case "FileName":
@@ -375,6 +372,22 @@ public class DocumentManager {
         } catch (MetadataTypeNotAllowedException e) {
             plugin.updateLogAndProcess(1, "Error creating page - Metadata type not allowed", 3);
             return false;
+        }
+    }
+
+    private void setAuthorityFile(Metadata metadata, String gndUri) {
+        if (StringUtils.isBlank(gndUri)) {
+            return;
+        }
+        int index = gndUri.lastIndexOf('/');
+        if (index < 0) {
+            plugin.updateLogAndProcess(process.getId(), "Couldn't parse gndUri ", 3);
+            return;
+
+        }
+        String gnd = gndUri.substring(index + 1);
+        if (StringUtils.isNotBlank(gnd)) {
+            metadata.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
         }
     }
 

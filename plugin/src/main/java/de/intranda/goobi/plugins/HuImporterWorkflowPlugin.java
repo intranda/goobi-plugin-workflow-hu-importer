@@ -44,7 +44,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
-import ugh.dl.DocStruct;
 import ugh.dl.Prefs;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
@@ -56,7 +55,7 @@ import ugh.exceptions.WriteException;
 @Log4j2
 public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
-    private ArrayList<LogMessage> errorList = new ArrayList<LogMessage>();
+    private ArrayList<LogMessage> errorList = new ArrayList<>();
     private BeanHelper bhelp;
     @Getter
     private String title = "intranda_workflow_hu_importer";
@@ -75,7 +74,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     int itemsTotal = 0;
     @Getter
-    private Queue<LogMessage> logQueue = new CircularFifoQueue<LogMessage>(48);
+    private Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
     private Prefs prefs;
     private ArrayList<String> failedImports;
     private boolean successful = true;
@@ -108,7 +107,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         config = ConfigPlugins.getPluginConfig(title);
 
         // read list of ImportSet configuration
-        importSets = new ArrayList<ImportSet>();
+        importSets = new ArrayList<>();
         try {
             List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
             for (HierarchicalConfiguration node : mappings) {
@@ -128,22 +127,23 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String eadType = node.getString("[@eadType]", null);
                 String eadFile = node.getString("[@eadFile]", null);
                 String eadNode = node.getString("[@eadNode]", null);
-                String eadSubnodeType = node.getString("[@eadSubnodeType]",null);
+                String eadSubnodeType = node.getString("[@eadSubnodeType]", null);
                 importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
-                        rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType));
+                        rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode,
+                        eadSubnodeType));
             }
 
             // write a log into the UI
             updateLog("Configuration successfully read");
         } catch (NullPointerException ex) {
-            String logmessage= "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file.";
-            importSets = new ArrayList<ImportSet>();
-            log.error(logmessage,ex);
+            String logmessage = "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file.";
+            importSets = new ArrayList<>();
+            log.error(logmessage, ex);
             LogMessage message = new LogMessage(logmessage, 3);
             logQueue.add(message);
             errorList.add(message);
             successful = false;
-            
+
             log.debug(logmessage);
             if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
                 lastPush = System.currentTimeMillis();
@@ -182,7 +182,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         // create a list of all fields to import
-        List<MappingField> mappingFields = new ArrayList<MappingField>();
+        List<MappingField> mappingFields = new ArrayList<>();
         List<HierarchicalConfiguration> fields = mappingNode.configurationsAt("field");
         try {
             for (HierarchicalConfiguration field : fields) {
@@ -191,10 +191,14 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String mets = field.getString("[@mets]", null);
                 String type = field.getString("[@type]", null);
                 String separator = field.getString("[@separator]", ",");
+                if ("space".equals(separator)) {
+                    separator = " ";
+                }
                 boolean blankBeforeSeparator = field.getBoolean("[@blankBeforeSeparator]", false);
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
                 String ead = field.getString("[@ead]", null);
-                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead));
+                String gndColumn = field.getString("[@gndColumn]", null);
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead, gndColumn));
             }
             return mappingFields;
         } catch (NullPointerException ex) {
@@ -217,8 +221,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         Row processDescriptionRow = null;
         if (importSet.getImportSetDescription() != null) {
             List<MappingField> processMetadata = getMapping(importSet.getDescriptionMappingSet());
-            List<MappingField> processDescription = new ArrayList<MappingField>();
-            HashMap<String, String> processProperties = new HashMap<String, String>();
+            List<MappingField> processDescription = new ArrayList<>();
+            HashMap<String, String> processProperties = new HashMap<>();
 
             MappingField fileNameColumn = null;
             if (processMetadata == null) {
@@ -241,7 +245,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             // get field that maps Column with FileName
             for (MappingField field : processDescription) {
-                if (field.getType().equals("FileName")) {
+                if ("FileName".equals(field.getType())) {
                     fileNameColumn = field;
                     break;
                 }
@@ -294,8 +298,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param importConfiguration
      */
     public void startImport(ImportSet importSet) {
-        errorList = new ArrayList<LogMessage>();
-        failedImports = new ArrayList<String>();
+        errorList = new ArrayList<>();
+        failedImports = new ArrayList<>();
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         updateLog("Start import for: " + importSet.getName());
         progress = 0;
@@ -377,7 +381,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
                         process = dManager.getProcess();
                         EadManager eadManager = null;
-                        String nodeId=null;
+                        String nodeId = null;
                         if (StringUtils.isNotBlank(importSet.getEadFile())) {
                             eadManager = new EadManager(importSet, process.getTitel());
                             if (eadManager.isDbStatusOk()) {
@@ -393,37 +397,44 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             for (MappingField mapping : processDescription.getMetaDataMapping()) {
                                 try {
                                     String cellContent = XlsReader.getCellContent(processDescription.getRow(), mapping);
-                                    dManager.addMetaDataToTopStruct(mapping, cellContent);
+                                    String gndUri = null;
+                                    if (StringUtils.isNotBlank(mapping.getGndColumn())) {
+                                        gndUri = XlsReader.getCellContentSplit(processDescription.getRow(), mapping.getGndColumn());
+                                    }
+                                    dManager.addMetaDataToTopStruct(mapping, cellContent, gndUri);
                                 } catch (MetadataTypeNotAllowedException e) {
                                     updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets " + mapping.getMets() + " in MappingSet "
                                             + importSet.getDescriptionMappingSet(), 3);
                                 }
                             }
                             try {
-								dManager.addNodeIdToTopStruct(nodeId);
-							} catch (MetadataTypeNotAllowedException e) {
-                                updateLog("Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.", 3);
-							}
+                                dManager.addNodeIdToTopStruct(nodeId);
+                            } catch (MetadataTypeNotAllowedException e) {
+                                updateLog(
+                                        "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
+                                        3);
+                            }
                         }
                         // Initialize PageCount
                         int PageCount = 0;
                         for (Row row : sheet) {
                             // skip rows until start row
-                            if (row.getRowNum() < importSet.getRowStart() - 1)
+                            if (row.getRowNum() < importSet.getRowStart() - 1) {
                                 continue;
-                            String subnodeId =null;
+                            }
+                            String subnodeId = null;
                             //only add ead subnodes if a SubnodeType is specified
-                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType())&& eadManager.isDbStatusOk()) {
-                            	subnodeId = eadManager.addSubnodeWithMetaData(row,mappingFields);
+                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType()) && eadManager.isDbStatusOk()) {
+                                subnodeId = eadManager.addSubnodeWithMetaData(row, mappingFields);
                             }
                             // end parsing after end row number
-                            if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd())
+                            if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd()) {
                                 break;
+                            }
 
                             // create the metadata fields by reading the config (and get content from the
                             // content files of course)
                             dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
-                            
 
                         }
                         // close workbook
@@ -434,7 +445,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         if (successful) {
                             // start any open automatic tasks for the created process
                             for (Step s : process.getSchritteList()) {
-                                if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+                                if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum()) && s.isTypAutomatisch()) {
                                     ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
                                     myThread.startOrPutToQueue();
                                 }
@@ -448,7 +459,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             storageProvider.move(processFile, Paths.get(failureFolder.toString(), processFile.getFileName().toString()));
 
                             for (Step s : process.getSchritteList()) {
-                                if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN)) {
+                                if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum())) {
                                     s.setBearbeitungsstatusEnum(StepStatus.ERROR);
                                     break;
                                 }
@@ -471,11 +482,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                         String message = (process != null) ? "Error mapping and importing data during the import of process: "
                                 : "Error creating a process during import";
-                        
 
                         log.error("Error  during the import for process", e);
                         if (process != null) {
-                        	message = message + process.getTitel() + " " + e.getMessage();
+                            message = message + process.getTitel() + " " + e.getMessage();
                             updateLogAndProcess(process.getId(), message, 3);
                             try {
                                 ProcessManager.saveProcess(process);
@@ -483,8 +493,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                                 e1.printStackTrace();
                             }
-                        }else {
-                        	updateLog(message, 3);
+                        } else {
+                            updateLog(message, 3);
                         }
                     }
 
@@ -509,7 +519,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             } catch (InterruptedException | IOException e) {
                 Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
                 log.error("Error trying to execute the import", e);
-                
+
             }
 
             pusher.send("summary");
@@ -604,6 +614,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private boolean blankBeforeSeparator;
         private boolean blankAfterSeparator;
         private String ead;
+        private String gndColumn;
     }
 
     @Data
