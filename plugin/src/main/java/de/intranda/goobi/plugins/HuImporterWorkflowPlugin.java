@@ -409,6 +409,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             }
                             try {
                                 dManager.addNodeIdToTopStruct(nodeId);
+                                dManager.addCatalogueId(nodeId);
                             } catch (MetadataTypeNotAllowedException e) {
                                 updateLog(
                                         "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",

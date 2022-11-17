@@ -153,6 +153,14 @@ public class DocumentManager {
         addNodeId(logical, nodeId);
     }
 
+    public void addCatalogueId(String id) throws MetadataTypeNotAllowedException {
+        if (StringUtils.isNotBlank(id)) {
+            Metadata cid = new Metadata(prefs.getMetadataTypeByName("CatalogIDDigital"));
+            cid.setValue(id);
+            logical.addMetadata(cid);
+        }
+    }
+    
     private void addNodeId(DocStruct ds, String nodeId) throws MetadataTypeNotAllowedException {
         if (StringUtils.isNotBlank(nodeId)) {
             Metadata nodeid = new Metadata(prefs.getMetadataTypeByName("NodeId"));
