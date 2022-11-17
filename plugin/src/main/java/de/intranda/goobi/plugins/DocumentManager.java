@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.Row;
 import org.goobi.beans.Process;
+import org.goobi.beans.Project;
 
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.ImportSet;
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
@@ -118,15 +119,18 @@ public class DocumentManager {
             bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
             bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
 
+            Project project = null;
             String projectName = importSet.getProject();
             if (!StringUtils.isBlank(projectName)) {
                 try {
-                    ProjectManager.getProjectByName(projectName);
+                    project = ProjectManager.getProjectByName(projectName);
+                    process.setProjekt(project);
                 } catch (DAOException e) {
                     plugin.updateLog(
                             "A Project with the name: " + projectName + " does not exist. Please update the configuration or create the Project.", 3);
                 }
             }
+
             this.process = process;
             // read fileformat etc. from process
             this.fileformat = this.process.readMetadataFile();

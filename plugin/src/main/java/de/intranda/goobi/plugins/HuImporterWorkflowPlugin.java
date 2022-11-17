@@ -308,7 +308,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // read mappings
 
         List<MappingField> mappingFields = getMapping(importSet.getMapping());
-        if (mappingFields == null || mappingFields.size() == 0) {
+        if (mappingFields == null || mappingFields.isEmpty()) {
             updateLog("Import could not be executed because no MappingSet with the name " + importSet.getMapping() + "  was found!", 3);
             return;
         }
@@ -323,7 +323,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 return;
             }
         }
-        Path failureFolder = Paths.get(importSet.getMetadataFolder(), "failure");
+        Path failureFolder = Paths.get(importSet.getMetadataFolder(), "error");
         if (!storageProvider.isFileExists(failureFolder)) {
             try {
                 storageProvider.createDirectories(failureFolder);
@@ -345,7 +345,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             Process process = null;
             try {
 
-                if (FilesToRead.size() == 0) {
+                if (FilesToRead.isEmpty()) {
                     updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
                 }
                 for (Path processFile : FilesToRead) {
