@@ -387,7 +387,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             if (eadManager.isDbStatusOk()) {
                                 nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                             } else {
-                                updateLogAndProcess(process.getId(), "Couldn't open baseX-DB, no EAD-Entries were generated for this process!", 3);
+                                updateLogAndProcess(process.getId(), "Couldn't open baseX-DB as the database is locked! No EAD-Entries were generated for this process!", 3);
                             }
                         }
                         this.prefs = dManager.getPrefs();
