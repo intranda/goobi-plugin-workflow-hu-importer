@@ -108,7 +108,11 @@ public class DocumentManager {
             DocStruct physical = dd.createDocStruct(this.prefs.getDocStrctTypeByName("BoundBook"));
             dd.setPhysicalDocStruct(physical);
 
-            DocStruct logic = dd.createDocStruct(this.prefs.getDocStrctTypeByName(importSet.getPublicationType()));
+            DocStructType dstype = this.prefs.getDocStrctTypeByName(importSet.getPublicationType());
+            if (dstype == null) {
+                throw new ProcessCreationException("Couldn't find publication type: " + importSet.getPublicationType() + " in the ruleset.");
+            }
+            DocStruct logic = dd.createDocStruct(dstype);
             dd.setLogicalDocStruct(logic);
 
             // save the process
@@ -160,7 +164,7 @@ public class DocumentManager {
             logical.addMetadata(cid);
         }
     }
-    
+
     private void addNodeId(DocStruct ds, String nodeId) throws MetadataTypeNotAllowedException {
         if (StringUtils.isNotBlank(nodeId)) {
             Metadata nodeid = new Metadata(prefs.getMetadataTypeByName("NodeId"));
@@ -180,7 +184,13 @@ public class DocumentManager {
     }
 
     public void createStructure(String structType) throws TypeNotAllowedForParentException {
-        structure = digitalDocument.createDocStruct(prefs.getDocStrctTypeByName(structType));
+        DocStructType dsType = prefs.getDocStrctTypeByName(structType);
+        if (dsType != null) {
+            structure = digitalDocument.createDocStruct(dsType);
+        } else {
+            plugin.updateLogAndProcess(process.getId(), "Couldn't find DocStruct type: " + structType + " in the ruleset.", 3);
+            throw new TypeNotAllowedForParentException("Couldn't find DocStruct type:" + structType + " in the ruleset.");
+        }
     }
 
     public void createStructureWithMetaData(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
