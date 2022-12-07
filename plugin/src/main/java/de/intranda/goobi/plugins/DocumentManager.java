@@ -406,13 +406,15 @@ public class DocumentManager {
         if (StringUtils.isBlank(gndUri)) {
             return;
         }
+        String gnd = null;
         int index = gndUri.lastIndexOf('/');
         if (index < 0) {
-            plugin.updateLogAndProcess(process.getId(), "Couldn't parse gndUri ", 3);
-            return;
-
+            // plugin.updateLogAndProcess(process.getId(), "Couldn't parse gndUri ", 3);
+            // better to be optimistic, maybe it's a gnd without authority uri
+            gnd = gndUri.trim();
+        } else {
+            gnd = gndUri.substring(index + 1);
         }
-        String gnd = gndUri.substring(index + 1);
         if (StringUtils.isNotBlank(gnd)) {
             metadata.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
         }
