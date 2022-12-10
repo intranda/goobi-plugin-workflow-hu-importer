@@ -34,6 +34,7 @@
 		eadFile="EAD-Store - Sudanarchäologie.xml" 
 		eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
 		eadSubnodeType="file"
+        processTitleMode="EAD"
 	/>
 
 	<!-- 

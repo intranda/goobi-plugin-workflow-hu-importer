@@ -123,14 +123,13 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 int rowEnd = node.getInt("[@rowEnd]", 0);
                 String importSetDescription = node.getString("[@importSetDescription]", null);
                 String descriptionMappingSet = node.getString("[@descriptionMappingSet]", null);
-                boolean useFileNameAsProcessTitle = node.getBoolean("[@useFileNameAsProcessTitle]", false);
+                String processTitleMode = node.getString("[@processTitleMode]", "UUID");
                 String eadType = node.getString("[@eadType]", null);
                 String eadFile = node.getString("[@eadFile]", null);
                 String eadNode = node.getString("[@eadNode]", null);
                 String eadSubnodeType = node.getString("[@eadSubnodeType]", null);
                 importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
-                        rowStart, rowEnd, useFileNameAsProcessTitle, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode,
-                        eadSubnodeType));
+                        rowStart, rowEnd, processTitleMode, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType));
             }
 
             // write a log into the UI
@@ -378,18 +377,28 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             continue;
                         }
                         // create Process, DocumentManager and EadManager
-                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
-                        process = dManager.getProcess();
                         EadManager eadManager = null;
                         String nodeId = null;
                         if (StringUtils.isNotBlank(importSet.getEadFile())) {
-                            eadManager = new EadManager(importSet, process.getTitel());
+                            eadManager = new EadManager(importSet);
                             if (eadManager.isDbStatusOk()) {
                                 nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                             } else {
-                                updateLogAndProcess(process.getId(), "Couldn't open baseX-DB as the database is locked! No EAD-Entries were generated for this process!", 3);
+                                updateLog("Couldn't open baseX-DB as the database is locked! No EAD-Entries were generated for this process!", 3);
                             }
                         }
+                        if (importSet.getProcessTitleMode().toUpperCase() == "EAD") {
+                            if (nodeId == null) {
+                                updateLog("processTitleMode EAD specified but no EAD NodeId was generated.", 3);
+                                failedImports.add(processFile.getFileName().toString());
+                                continue;
+                            }
+                            processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
+                        }
+
+                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
+                        process = dManager.getProcess();
+
                         this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
 
@@ -637,7 +646,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String structureType;
         private int rowStart;
         private int rowEnd;
-        private boolean useFileNameAsProcessTitle;
+        private String processTitleMode;
         private String importSetDescription;
         private String DescriptionMappingSet;
         private String eadType;

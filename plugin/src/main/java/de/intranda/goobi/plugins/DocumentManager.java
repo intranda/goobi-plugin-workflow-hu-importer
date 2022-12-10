@@ -68,25 +68,27 @@ public class DocumentManager {
         HashMap<String, String> processProperties = processDescription.getProcessProperties();
 
         String processname = null;
-        if (processProperties != null) {
-            processname = processProperties.get(ProcessProperties.PROCESSNAME.toString());
+        switch (importSet.getProcessTitleMode().toUpperCase()) {
+            case "FILENAME":
+                String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
+                String filename = processDescription.getFileName().toString();
+                if (filename.contains(".")) {
+                    filename = filename.substring(0, filename.lastIndexOf("."));
+                }
+                processname = filename.replaceAll(regex, "_").trim();
+                break;
+            case "EAD":
+                // if EAD Mode was set the process property process name should have been updated.
+            case "XLSX":
+                processname = processProperties.get(ProcessProperties.PROCESSNAME.toString());
+                break;
+            case "UUID":
+                // UUID is the default mode
+            default:
+                processname = UUID.randomUUID().toString();
+                break;
         }
 
-        String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
-
-        // if processname field was empty use filename UUID
-        if (StringUtils.isBlank(processname)) {
-            processname = UUID.randomUUID().toString();
-        }
-
-        // if UseAsProcessTitle is set use Filename as ProcessTitle
-        if (importSet.isUseFileNameAsProcessTitle()) {
-            String filename = processDescription.getFileName().toString();
-            if (filename.contains(".")) {
-                filename = filename.substring(0, filename.lastIndexOf("."));
-            }
-            processname = filename.replaceAll(regex, "_").trim();
-        }
         if (ProcessManager.countProcessTitle(processname, null) > 0) {
             int tempCounter = 1;
             String tempName = processname + "_" + tempCounter;
