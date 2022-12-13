@@ -89,6 +89,10 @@ public class DocumentManager {
                 processname = UUID.randomUUID().toString();
                 break;
         }
+        // if for any reason no processname was specified until here point use a UUID
+        if (StringUtils.isBlank(processname)) {
+            processname = UUID.randomUUID().toString();
+        }
 
         if (ProcessManager.countProcessTitle(processname, null) > 0) {
             int tempCounter = 1;
