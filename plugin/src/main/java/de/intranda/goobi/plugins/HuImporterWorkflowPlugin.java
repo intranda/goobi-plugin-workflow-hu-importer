@@ -28,7 +28,6 @@ import org.goobi.production.plugin.interfaces.IWorkflowPlugin;
 import org.omnifaces.cdi.PushContext;
 
 import de.sub.goobi.config.ConfigPlugins;
-import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.NIOFileUtils;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
@@ -44,7 +43,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
-import ugh.dl.Prefs;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
 import ugh.exceptions.TypeNotAllowedAsChildException;
@@ -56,7 +54,6 @@ import ugh.exceptions.WriteException;
 public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     private ArrayList<LogMessage> errorList = new ArrayList<>();
-    private BeanHelper bhelp;
     @Getter
     private String title = "intranda_workflow_hu_importer";
     private long lastPush = System.currentTimeMillis();
@@ -64,7 +61,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private List<ImportSet> importSets;
     private PushContext pusher;
     private XMLConfiguration config = null;
-    private HierarchicalConfiguration mappingNode = null;
     @Getter
     private boolean run = false;
     @Getter
@@ -75,7 +71,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     int itemsTotal = 0;
     @Getter
     private Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
-    private Prefs prefs;
+
     private ArrayList<String> failedImports;
     private boolean successful = true;
 
@@ -166,7 +162,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     private List<MappingField> getMapping(String mappingName) {
         // find the correct mapping node
-        mappingNode = null;
+        HierarchicalConfiguration mappingNode = null;
         for (HierarchicalConfiguration node : config.configurationsAt("mappingSet")) {
             String name = node.getString("[@name]");
             if (name.equals(mappingName)) {
@@ -302,7 +298,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         updateLog("Start import for: " + importSet.getName());
         progress = 0;
-        bhelp = new BeanHelper();
 
         // read mappings
 
@@ -398,7 +393,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
                         }
 
-                        this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
 
                         if (processDescription != null && processDescription.getMetaDataMapping() != null) {
