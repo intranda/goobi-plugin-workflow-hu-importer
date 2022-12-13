@@ -24,12 +24,18 @@ public class EadManager {
     private ArchiveManagementAdministrationPlugin archivePlugin;
     private String processName;
     private ImportSet importSet;
+    private boolean setNodeId;
     private IEadEntry selectedNode = null;
     @Getter
     private boolean dbStatusOk;
 
-    public EadManager(ImportSet importSet) {
+    public EadManager(ImportSet importSet, String processName, String processNamingMode) {
         this.importSet = importSet;
+        this.processName = processName;
+
+        // if processNamingMode equals EAD use the UUID of the process as UUID of the new Node
+        this.setNodeId = "EAD".equalsIgnoreCase(processNamingMode);
+
         // find out if archive file is locked currently
         IPlugin ia = PluginLoader.getPluginByTitle(PluginType.Administration, "intranda_administration_archive_management");
         this.archivePlugin = (ArchiveManagementAdministrationPlugin) ia;
@@ -92,9 +98,12 @@ public class EadManager {
                 entry.setNodeType(nt);
             }
         }
-
+        if (setNodeId) {
+            entry.setId(processName);
+        }
         addMetadata(entry, row, mappingFields);
-        entry.setGoobiProcessTitle(processName);
+        entry.setGoobiProcessTitle(entry.getId());
+
         archivePlugin.createEadDocument();
         return entry.getId();
     }

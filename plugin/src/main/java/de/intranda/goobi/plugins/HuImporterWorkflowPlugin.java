@@ -377,10 +377,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             continue;
                         }
                         // create Process, DocumentManager and EadManager
+                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
+                        process = dManager.getProcess();
                         EadManager eadManager = null;
                         String nodeId = null;
                         if (StringUtils.isNotBlank(importSet.getEadFile())) {
-                            eadManager = new EadManager(importSet);
+                            eadManager = new EadManager(importSet, process.getTitel(), importSet.getProcessTitleMode());
                             if (eadManager.isDbStatusOk()) {
                                 nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
                             } else {
@@ -395,9 +397,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             }
                             processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
                         }
-
-                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
-                        process = dManager.getProcess();
 
                         this.prefs = dManager.getPrefs();
                         updateLog("Start importing: " + process.getTitel(), 1);
