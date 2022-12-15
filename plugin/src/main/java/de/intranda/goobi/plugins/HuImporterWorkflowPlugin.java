@@ -418,8 +418,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         3);
                             }
                         }
-                        // Initialize PageCount
-                        int PageCount = 0;
                         for (Row row : sheet) {
                             // skip rows until start row
                             if (row.getRowNum() < importSet.getRowStart() - 1) {
@@ -438,7 +436,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             // create the metadata fields by reading the config (and get content from the
                             // content files of course)
                             dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
-
                         }
                         // close workbook
                         reader.closeWorkbook();
