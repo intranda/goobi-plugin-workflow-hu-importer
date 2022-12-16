@@ -2,8 +2,9 @@ package de.intranda.goobi.plugins;
 
 public enum ProcessProperties {
     PROCESSNAME("ProcessName"),
-    FILENAME("FileName");
-    
+    FILENAME("FileName"),
+    PUBLICATIONTYPE("PublicationType");
+
     private ProcessProperties(String notation) {
         this.notation = notation;
     }
@@ -12,6 +13,6 @@ public enum ProcessProperties {
 
     @Override
     public String toString() {
-        return notation;
+        return this.notation;
     }
 }

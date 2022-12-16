@@ -100,12 +100,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     private void readConfiguration() {
         updateLog("Start reading the configuration");
-        config = ConfigPlugins.getPluginConfig(title);
+        this.config = ConfigPlugins.getPluginConfig(this.title);
 
         // read list of ImportSet configuration
-        importSets = new ArrayList<>();
+        this.importSets = new ArrayList<>();
         try {
-            List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
+            List<HierarchicalConfiguration> mappings = this.config.configurationsAt("importSet");
             for (HierarchicalConfiguration node : mappings) {
                 String name = node.getString("[@name]", null);
                 String metadataFolder = node.getString("[@metadataFolder]", null);
@@ -124,25 +124,27 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String eadFile = node.getString("[@eadFile]", null);
                 String eadNode = node.getString("[@eadNode]", null);
                 String eadSubnodeType = node.getString("[@eadSubnodeType]", null);
-                importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
-                        rowStart, rowEnd, processTitleMode, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType));
+                boolean processPerRow = node.getBoolean("@processPerRow", false);
+                this.importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
+                        rowStart, rowEnd, processTitleMode, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType,
+                        processPerRow));
             }
 
             // write a log into the UI
             updateLog("Configuration successfully read");
         } catch (NullPointerException ex) {
             String logmessage = "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file.";
-            importSets = new ArrayList<>();
+            this.importSets = new ArrayList<>();
             log.error(logmessage, ex);
             LogMessage message = new LogMessage(logmessage, 3);
-            logQueue.add(message);
-            errorList.add(message);
-            successful = false;
+            this.logQueue.add(message);
+            this.errorList.add(message);
+            this.successful = false;
 
             log.debug(logmessage);
-            if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
-                lastPush = System.currentTimeMillis();
-                pusher.send("update");
+            if (this.pusher != null && System.currentTimeMillis() - this.lastPush > 500) {
+                this.lastPush = System.currentTimeMillis();
+                this.pusher.send("update");
             }
         }
     }
@@ -151,7 +153,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * cancel a running import
      */
     public void cancel() {
-        run = false;
+        this.run = false;
     }
 
     /**
@@ -163,7 +165,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private List<MappingField> getMapping(String mappingName) {
         // find the correct mapping node
         HierarchicalConfiguration mappingNode = null;
-        for (HierarchicalConfiguration node : config.configurationsAt("mappingSet")) {
+        for (HierarchicalConfiguration node : this.config.configurationsAt("mappingSet")) {
             String name = node.getString("[@name]");
             if (name.equals(mappingName)) {
                 // log.debug("Configured mapping was found: " + name);
@@ -212,17 +214,18 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param processFile
      * @return
      */
-    private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
-        Row processDescriptionRow = null;
+    private ProcessDescription getProcessDescription(Row processRow, ImportSet importSet, Path processFile) {
+        Row processDescriptionRow = processRow;
+        String mappingSet = importSet.isRowMode() ? importSet.getMapping() : importSet.getDescriptionMappingSet();
         if (importSet.getImportSetDescription() != null) {
-            List<MappingField> processMetadata = getMapping(importSet.getDescriptionMappingSet());
+            List<MappingField> processMetadata = getMapping(mappingSet);
             List<MappingField> processDescription = new ArrayList<>();
             HashMap<String, String> processProperties = new HashMap<>();
 
             MappingField fileNameColumn = null;
             if (processMetadata == null) {
-                updateLog("No valid ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet() + " was found!", 3);
-                failedImports.add(processFile.getFileName().toString());
+                updateLog("No valid ImportSetDescription with the Name: " + mappingSet + " was found!", 3);
+                this.failedImports.add(processFile.getFileName().toString());
                 return null;
             }
 
@@ -246,6 +249,14 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
             }
 
+            // if we are in row mode we don't need to read a description mapping set an can leave the pile of sh
+            if (importSet.isRowMode()) {
+                for (MappingField field : processDescription) {
+                    processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
+                }
+                return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
+            }
+
             if (fileNameColumn != null) {
                 try {
                     XlsReader reader = new XlsReader(importSet.getImportSetDescription());
@@ -264,7 +275,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         updateLog("A File with Processdescriptions was specified but the Filename (" + processFile.getFileName().toString()
                                 + ") was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
                         updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
-                        failedImports.add(processFile.getFileName().toString());
+                        this.failedImports.add(processFile.getFileName().toString());
                         reader.closeWorkbook();
                         return null;
                     }
@@ -293,11 +304,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param importConfiguration
      */
     public void startImport(ImportSet importSet) {
-        errorList = new ArrayList<>();
-        failedImports = new ArrayList<>();
+        this.errorList = new ArrayList<>();
+        this.failedImports = new ArrayList<>();
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         updateLog("Start import for: " + importSet.getName());
-        progress = 0;
+        this.progress = 0;
 
         // read mappings
 
@@ -328,14 +339,14 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         // run the import in a separate thread to allow a dynamic progress bar
-        run = true;
+        this.run = true;
         Runnable runnable = () -> {
 
             // create list with files in metadata folder of importSet
             List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
             updateLog("Run through all import files");
-            itemsTotal = FilesToRead.size();
-            itemCurrent = 0;
+            this.itemsTotal = FilesToRead.size();
+            this.itemCurrent = 0;
             Process process = null;
             try {
 
@@ -343,22 +354,18 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
                 }
                 for (Path processFile : FilesToRead) {
-                    successful = true;
-                    ProcessDescription processDescription = getProcessDescription(importSet, processFile);
+                    this.successful = true;
+                    ProcessDescription processDescription = getProcessDescription(null, importSet, processFile);
                     if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
                         updateLog("A importSetDescription was configured but there were Errors getting the Description!", 3);
                         continue;
                     }
 
                     Thread.sleep(100);
-                    if (!run) {
+                    if (!this.run) {
                         break;
                     }
                     updateLog("Datei: " + processFile.toString());
-
-                    //Try to open File if IOException flies here, no process will be created
-                    XlsReader reader = new XlsReader(processFile.toString());
-                    Sheet sheet = reader.getSheet();
 
                     try {
                         Set<Path> imageFiles = null;
@@ -368,7 +375,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         } else {
                             // check if this is desired behavior!
                             updateLog("No mediaFolder specified! Import aborted!", 3);
-                            failedImports.add(processFile.getFileName().toString());
+                            this.failedImports.add(processFile.getFileName().toString());
                             continue;
                         }
                         // create Process, DocumentManager and EadManager
@@ -387,7 +394,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         if (importSet.getProcessTitleMode().toUpperCase() == "EAD") {
                             if (nodeId == null) {
                                 updateLog("processTitleMode EAD specified but no EAD NodeId was generated.", 3);
-                                failedImports.add(processFile.getFileName().toString());
+                                this.failedImports.add(processFile.getFileName().toString());
                                 continue;
                             }
                             processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
@@ -396,19 +403,9 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         updateLog("Start importing: " + process.getTitel(), 1);
 
                         if (processDescription != null && processDescription.getMetaDataMapping() != null) {
-                            for (MappingField mapping : processDescription.getMetaDataMapping()) {
-                                try {
-                                    String cellContent = XlsReader.getCellContent(processDescription.getRow(), mapping);
-                                    String gndUri = null;
-                                    if (StringUtils.isNotBlank(mapping.getGndColumn())) {
-                                        gndUri = XlsReader.getCellContentSplit(processDescription.getRow(), mapping.getGndColumn());
-                                    }
-                                    dManager.addMetaDataToTopStruct(mapping, cellContent, gndUri);
-                                } catch (MetadataTypeNotAllowedException e) {
-                                    updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets " + mapping.getMets() + " in MappingSet "
-                                            + importSet.getDescriptionMappingSet(), 3);
-                                }
-                            }
+
+                            dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(), imageFiles,
+                                    nodeId);
                             try {
                                 dManager.addNodeIdToTopStruct(nodeId);
                                 dManager.addCatalogueId(nodeId);
@@ -418,34 +415,38 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         3);
                             }
                         }
-                        // Initialize PageCount
-                        int PageCount = 0;
-                        for (Row row : sheet) {
-                            // skip rows until start row
-                            if (row.getRowNum() < importSet.getRowStart() - 1) {
-                                continue;
-                            }
-                            String subnodeId = null;
-                            //only add ead subnodes if a SubnodeType is specified
-                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType()) && eadManager.isDbStatusOk()) {
-                                subnodeId = eadManager.addSubnodeWithMetaData(row, mappingFields);
-                            }
-                            // end parsing after end row number
-                            if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd()) {
-                                break;
-                            }
 
-                            // create the metadata fields by reading the config (and get content from the
-                            // content files of course)
-                            dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
+                        if (!importSet.isRowMode()) {
+                            //Try to open File if IOException flies here, no process will be created
+                            XlsReader reader = new XlsReader(processFile.toString());
+                            Sheet sheet = reader.getSheet();
+                            for (Row row : sheet) {
+                                // skip rows until start row
+                                if (row.getRowNum() < importSet.getRowStart() - 1) {
+                                    continue;
+                                }
+                                String subnodeId = null;
+                                //only add ead subnodes if a SubnodeType is specified
+                                if (StringUtils.isNotBlank(importSet.getEadSubnodeType()) && eadManager.isDbStatusOk()) {
+                                    subnodeId = eadManager.addSubnodeWithMetaData(row, mappingFields);
+                                }
+                                // end parsing after end row number
+                                if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd()) {
+                                    break;
+                                }
 
+                                // create the metadata fields by reading the config (and get content from the
+                                // content files of course)
+                                dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
+
+                            }
+                            // close workbook
+                            reader.closeWorkbook();
                         }
-                        // close workbook
-                        reader.closeWorkbook();
                         // write the metsfile
                         dManager.writeMetadataFile();
                         updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID: " + process.getId(), 1);
-                        if (successful) {
+                        if (this.successful) {
                             // start any open automatic tasks for the created process
                             for (Step s : process.getSchritteList()) {
                                 if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum()) && s.isTypAutomatisch()) {
@@ -467,7 +468,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     break;
                                 }
                             }
-                            failedImports.add(processFile.getFileName().toString());
+                            this.failedImports.add(processFile.getFileName().toString());
                         }
 
                         //if eadManager was used save Changes
@@ -502,30 +503,30 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     }
 
                     // recalculate progress
-                    itemCurrent++;
-                    progress = 100 * itemCurrent / itemsTotal;
+                    this.itemCurrent++;
+                    this.progress = 100 * this.itemCurrent / this.itemsTotal;
                     updateLog("Processing of record done.");
                 }
 
                 // finally last push
-                run = false;
+                this.run = false;
                 Thread.sleep(1000);
                 updateLog("Import completed.", 2);
-                if (failedImports.size() > 0) {
+                if (this.failedImports.size() > 0) {
                     updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
-                    updateLog(failedImports.size() + " Import(s) finished with errors!", 3);
-                    failedImports.forEach((importFile) -> {
+                    updateLog(this.failedImports.size() + " Import(s) finished with errors!", 3);
+                    this.failedImports.forEach((importFile) -> {
                         updateLog(importFile, 3);
                     });
                 }
 
-            } catch (InterruptedException | IOException e) {
+            } catch (InterruptedException e) {
                 Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
                 log.error("Error trying to execute the import", e);
 
             }
 
-            pusher.send("summary");
+            this.pusher.send("summary");
         };
         new Thread(runnable).start();
 
@@ -592,15 +593,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     public void updateLog(String logmessage, int level) {
         LogMessage message = new LogMessage(logmessage, level);
-        logQueue.add(message);
+        this.logQueue.add(message);
         if (level == 3) {
-            errorList.add(message);
-            successful = false;
+            this.errorList.add(message);
+            this.successful = false;
         }
         log.debug(logmessage);
-        if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
-            lastPush = System.currentTimeMillis();
-            pusher.send("update");
+        if (this.pusher != null && System.currentTimeMillis() - this.lastPush > 500) {
+            this.lastPush = System.currentTimeMillis();
+            this.pusher.send("update");
         }
     }
 
@@ -646,6 +647,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String eadFile;
         private String eadNode;
         private String eadSubnodeType;
+        private boolean rowMode;
     }
 
     @Data
