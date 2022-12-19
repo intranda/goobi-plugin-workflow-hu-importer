@@ -24,22 +24,6 @@
 
     
     <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze -->
-    <importSet name="Steffens Version" 
-        metadataFolder="/opt/digiverso/import/mdvos/Sudan-Trenner/" 
-        mediaFolder ="/opt/digiverso/import/mdvos/Sudan-Bilder/" 
-        workflow="Sample_Workflow"
-        project="Archive_Project" 
-        mappingSet="LochkartenAnja" 
-        publicationType="CardFile"
-        structureType="Document"
-        importSetDescription="/opt/digiverso/import/mdvos/Sudan-Beschreibungen/SASA_Trenner_Zuordnung.xlsx"
-        descriptionMappingSet="DescriptionSteffen"
-        eadType="folder" 
-        eadFile="EAD-Store - Sudanarchaeologie.xml" 
-        eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
-        eadSubnodeType="file"
-    />
-
     <importSet name="Anjas Version" 
         metadataFolder="/opt/digiverso/import/mdvos/Sudan-Trenner/" 
         mediaFolder ="/opt/digiverso/import/mdvos/Sudan-Bilder/" 
@@ -54,8 +38,20 @@
         eadFile="EAD-Store - Sudanarchaeologie.xml" 
         eadNode="f91585c7-9cd4-47f1-b9e4-5f26a6744fe3"
         eadSubnodeType="file"
-        rowMode="true"
     />
+    
+        <!-- EAD-> Lochkartei - Grabungsdokumentation Fritz und Ursula Hintze -->
+    <importSet name="ProcessPerRowTest" 
+        metadataFolder="/opt/digiverso/import/mdvos/ProzessProZeile/" 
+        mediaFolder ="/opt/digiverso/import/mdvos/Sudan-Bilder/" 
+        workflow="Sample_Workflow"
+        project="Archive_Project" 
+        mappingSet="LochkartenProzessProZeile" 
+        publicationType="CardFile"
+        structureType="Document"
+        processPerRow="true"
+    />
+    
 
     <!-- 
         mapping set -> set of fields that describe a mapping:
@@ -196,6 +192,111 @@
             - Clarify no process_name is specified in the xlsx-file 
         <field column="D" label="Prozessname" type="ProcessName"/>  
         -->
+        </mappingSet>
+        
+       <mappingSet name="LochkartenProzessProZeile">
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="C" label="Dateiname" type="FileName" />
+        <!-- TODO: 
+            - PublicationType cannot be set this way. Ignore this?
+        <field column="D" label="Publikationstyp" type="FileName" />
+        -->     
+        <field column="E" label="Digitale Collection" type="metadata" mets="singleDigCollection" />
+        <!-- TODO: 
+            - EAD mapping correct? -->
+        <field column="F" label="Titel" type="metadata" mets="TitleDocMain"  ead="unittitle"/>
+        <!-- neu TitleDocMainShort  -->
+        <field column="G" label="Haupttitel (Sortierung)" type="metadata" mets="TitleDocMainShort" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="H" label="Haupttitel (englisch)" type="metadata" mets="TitleDocMainEN" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="I" label="Haupttitel (arabisch)" type="metadata" mets="TitleDocMainAR" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="J" label="Umfang" type="metadata" mets="physicalDescriptionExtent" ead="physdescstructured"/>
+        <!-- TODO: 
+            - EAD mapping correct? -->
+        <field column="K" label="Datierung" type="metadata" mets="DatingApproximate" ead="unitdate" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="L" label="Entstehungsort" type="metadata" mets="PlaceOfOrigin" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="M" label="Beteiligte Person 1" type="person" mets="Creator" gndColumn="O" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="P" label="Beteiligte Person 2" type="person" mets="Creator" gndColumn="R" />
+              <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="S" label="Beschreibung" type="metadata" mets="Description" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="T" label="Zusätzliche Informationen" type="metadata" mets="AdditionalInformation" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="U" label="Schlagwort (lokal)" type="metadata" mets="SubjectLocal" />
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="V" label="Formschlagwort" type="metadata" mets="SubjectForm" gndColumn="W" />
+        <!-- TODO: 
+            - GND W
+        -->
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="X" label="Geographisches Schlagwort 1" type="metadata" mets="SubjectGeographic" gndColumn="Y" />
+        <!-- TODO: 
+            - GND Y
+        -->
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="Z" label="Geographisches Schlagwort 2" type="metadata" mets="SubjectGeographic" gndColumn="AA" />
+        <!-- TODO: 
+            - GND "AA"
+        -->
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="AB" label="Sachschlagwort 1" type="metadata" mets="SubjectTopic" gndColumn="AC" />
+        <!-- TODO: 
+            - GND "AC" 
+        -->
+        <!-- TODO: 
+            - EAD mapping needed? -->
+        <field column="AD" label="Sachschlagwort 2" type="metadata" mets="SubjectTopic" gndColumn="AE" />
+        <!-- TODO:  
+            - GND "AE"
+        -->
+        <!-- TODO: 
+            - EAD mapping needed? 
+            - Mapping to METS to be clarified with Jan and Andrey -->
+        <field column="AF,AG" blankAfterSeparator="true" label="Geokoordinaten" type="metadata" mets="Coordinates" />
+        <!-- TODO: 
+            - EAD mapping correct? -->
+        <field column="AH" label="Sprache" type="metadata" mets="DocLanguage" ead="langmaterial"/>
+    <!-- weitere Felder AE -->
+        <!-- neu AE ViewerInstance-->
+        <field column="AI" label="Anzeige in" type="metadata" mets="ViewerInstance"/>
+        <!-- neu AE Zugriffsbeschränkung-->
+        <field column="AJ" label="Zugriffsbeschränkung" type="metadata" mets="AccessRestriction"/>
+        <!-- neu AE Nutzungslizenz-->
+        <field column="AK" label="Nutzungslizenz" type="metadata" mets="UsageLicense"/>
+        <!-- neu AE Anzeige im Internet ab Jahr-->
+        <field column="AL" label="Anzeige im Internet ab Jahr" type="metadata" mets="PublicReleaseYear"/> 
+        <!-- neu AE Standort-->
+        <field column="AM" label="Standort" type="metadata" mets="PhysicalLocation"/> 
+        <!-- neu AE Standort-->
+        <field column="AN" label="Besitzende Institution" type="metadata" mets="OwningInstitution"/> 
+        <!-- neu AE Publisher-->
+        <field column="AO" label="Herkunft Digitalisat" type="metadata" mets="Publisher"/> 
+        <!-- TODO: 
+            - Clarify no process_name is specified in the xlsx-file 
+        <field column="D" label="Prozessname" type="ProcessName"/>  
+        -->
+        
+        <field column="AP,AQ" label="Datei recto, Datei verso" type="media"/>
+        <field column="AR" label="test" type="PublicationType"/>
         </mappingSet>
 
 </config_plugin>

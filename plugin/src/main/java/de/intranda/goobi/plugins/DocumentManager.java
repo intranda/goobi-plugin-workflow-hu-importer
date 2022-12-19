@@ -116,9 +116,13 @@ public class DocumentManager {
             dd.setPhysicalDocStruct(physical);
 
             // try to use publicationtype from xlsx if it wasn't specified use fallback type from importset
-            String publicationType = processProperties.get(ProcessProperties.PUBLICATIONTYPE.toString());
-            if (StringUtils.isBlank(publicationType)) {
-                publicationType = importSet.getPublicationType();
+
+            String publicationType = importSet.getPublicationType();
+            if (processProperties != null) {
+                String publicationTypeTemp = processProperties.get(ProcessProperties.PUBLICATIONTYPE.toString());
+                if (StringUtils.isNotBlank(publicationTypeTemp)) {
+                    publicationType = publicationTypeTemp;
+                }
             }
             DocStructType dstype = this.prefs.getDocStrctTypeByName(publicationType);
             if (dstype == null) {
@@ -238,7 +242,7 @@ public class DocumentManager {
             }
             if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
                 if ("media".equals(mappingField.getType().trim())) {
-                    addMediaFile(mappingField, cellContent, imageFiles);
+                    addMediaFile(docStruct, mappingField, cellContent, imageFiles);
                 } else {
                     try {
                         addMetadata(docStruct, mappingField, cellContent, gndUri);
@@ -349,7 +353,8 @@ public class DocumentManager {
         }
     }
 
-    private void addMediaFile(MappingField mappingField, String cellContent, Set<Path> imageFiles) throws IOException, SwapException, DAOException {
+    private void addMediaFile(DocStruct structure, MappingField mappingField, String cellContent, Set<Path> imageFiles)
+            throws IOException, SwapException, DAOException {
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         String[] imageFileNames = cellContent.split(mappingField.getSeparator());
         for (String imageFileName : imageFileNames) {
@@ -367,7 +372,7 @@ public class DocumentManager {
                 }
                 if (Files.isReadable(imageFile)) {
                     storageProvider.copyFile(imageFile, Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
-                    if (!addPage(this.structure, imageFile.toFile())) {
+                    if (!addPage(structure, imageFile.toFile())) {
                         this.plugin.updateLogAndProcess(this.process.getId(), "Couldn't add page to structure", 3);
                     }
 
