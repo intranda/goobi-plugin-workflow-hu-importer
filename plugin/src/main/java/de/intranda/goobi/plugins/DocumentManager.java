@@ -22,12 +22,14 @@ import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.StorageProviderInterface;
+import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.ProjectManager;
 import lombok.Getter;
 import ugh.dl.ContentFile;
+import ugh.dl.Corporate;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.DocStructType;
@@ -59,6 +61,7 @@ public class DocumentManager {
     private ImportSet importSet;
     private int PageCount = 0;
     private DocStruct structure;
+    private VariableReplacer replacer;
 
     public DocumentManager(ProcessDescription processDescription, ImportSet importSet, HuImporterWorkflowPlugin plugin)
             throws ProcessCreationException {
@@ -157,6 +160,8 @@ public class DocumentManager {
             this.digitalDocument = this.fileformat.getDigitalDocument();
             this.logical = this.digitalDocument.getLogicalDocStruct();
             this.physical = this.digitalDocument.getPhysicalDocStruct();
+            //initialize variable replacer
+            this.replacer = new VariableReplacer(this.fileformat.getDigitalDocument(), this.prefs, this.process, null);
 
             // add imagepath:
             Metadata imagePath = new Metadata(this.prefs.getMetadataTypeByName("pathimagefiles"));
@@ -199,18 +204,22 @@ public class DocumentManager {
     //        addMetadata(this.structure, mappingField, cellContent, gndUri);
     //    }
 
-    public void createStructure(String structType) throws TypeNotAllowedForParentException {
+    private DocStruct createStructure(String structType) throws TypeNotAllowedForParentException {
         DocStructType dsType = this.prefs.getDocStrctTypeByName(structType);
         if (dsType != null) {
-            this.structure = this.digitalDocument.createDocStruct(dsType);
+            return this.digitalDocument.createDocStruct(dsType);
         } else {
             this.plugin.updateLogAndProcess(this.process.getId(), "Couldn't find DocStruct type: " + structType + " in the ruleset.", 3);
             throw new TypeNotAllowedForParentException("Couldn't find DocStruct type:" + structType + " in the ruleset.");
         }
     }
 
+    public void setStructure(String structType) throws TypeNotAllowedForParentException {
+        this.structure = createStructure(structType);
+    }
+
     protected void addMetadataFromRowToTopStruct(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
-            throws TypeNotAllowedAsChildException, IOException, SwapException, DAOException {
+            throws TypeNotAllowedAsChildException, IOException, SwapException, DAOException, TypeNotAllowedForParentException {
         addMetadataFromRow(this.logical, row, mappingFields, imageFiles, nodeId);
     }
 
@@ -226,13 +235,13 @@ public class DocumentManager {
                 structureType = cellContentType;
             }
         }
-        createStructure(structureType);
+        setStructure(structureType);
         addMetadataFromRow(this.structure, row, mappingFields, imageFiles, nodeId);
         this.logical.addChild(this.structure);
     }
 
     protected void addMetadataFromRow(DocStruct docStruct, Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
-            throws IOException, SwapException, DAOException, TypeNotAllowedAsChildException {
+            throws IOException, SwapException, DAOException, TypeNotAllowedAsChildException, TypeNotAllowedForParentException {
         for (MappingField mappingField : mappingFields) {
 
             String cellContent = XlsReader.getCellContent(row, mappingField);
@@ -242,7 +251,23 @@ public class DocumentManager {
             }
             if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
                 if ("media".equals(mappingField.getType().trim())) {
-                    addMediaFile(docStruct, mappingField, cellContent, imageFiles);
+                    if (importSet.isRowMode() && StringUtils.isNotBlank(mappingField.getStructureType())) {
+                        DocStruct imageContainer = createStructure(importSet.getStructureType());
+                        docStruct.addChild(imageContainer);
+                        addMediaFile(imageContainer, mappingField, cellContent, imageFiles);
+                    } else {
+                        addMediaFile(docStruct, mappingField, cellContent, imageFiles);
+                    }
+                } else if ("copy".equals(mappingField.getType().trim())) {
+                    // copy files to target folder
+                    if (StringUtils.isNotBlank(mappingField.getTarget()) && StringUtils.isNotBlank(this.importSet.getMediaFolder())) {
+                        String target = this.replacer.replace(mappingField.getTarget());
+                        copyFileToTarget(target, mappingField, cellContent, imageFiles);
+
+                    } else {
+                        this.plugin.updateLogAndProcess(this.process.getId(),
+                                "Type copy was used but no target (field/mapping) or no mediafolder (Importset) was specified.", 3);
+                    }
                 } else {
                     try {
                         addMetadata(docStruct, mappingField, cellContent, gndUri);
@@ -301,10 +326,8 @@ public class DocumentManager {
      * @param process
      * @return
      * @throws MetadataTypeNotAllowedException
-     * @throws TypeNotAllowedAsChildException
      */
-    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent, String gndUri)
-            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent, String gndUri) throws MetadataTypeNotAllowedException {
         switch (mappingField.getType()) {
             case "person":
                 if (StringUtils.isBlank(mappingField.getMets())) {
@@ -340,6 +363,17 @@ public class DocumentManager {
                     this.plugin.updateLogAndProcess(this.process.getId(),
                             "DocStruct has no type! This may happen if you specified an invalid type (i.e. Chapter) for sub elements", 3);
                 }
+                break;
+            case "corporate":
+                Corporate corp = new Corporate(this.prefs.getMetadataTypeByName(mappingField.getMets()));
+                corp.setMainName(cellContent);
+                ds.addCorporate(corp);
+                if (mappingField.getGndColumn() != null) {
+                    setAuthorityFile(corp, gndUri);
+                }
+                break;
+            case "copy":
+                //do nothing
                 break;
             case "FileName":
                 //do nothhing
@@ -379,6 +413,33 @@ public class DocumentManager {
                 } else {
                     this.plugin.updateLogAndProcess(this.process.getId(),
                             "Couldn't read the following file: " + this.importSet.getMediaFolder() + imageFileName, 3);
+                }
+            }
+        }
+    }
+
+    private void copyFileToTarget(String target, MappingField mappingField, String cellContent, Set<Path> imageFiles)
+            throws IOException, SwapException, DAOException {
+        StorageProviderInterface storageProvider = StorageProvider.getInstance();
+        String[] fileNames = cellContent.split(mappingField.getSeparator());
+        for (String fileName : fileNames) {
+            if (StringUtils.isBlank(fileName)) {
+                continue;
+            }
+            Path imageFile = imageFiles.stream().filter(path -> path.getFileName().toString().equals(fileName.trim())).findFirst().orElse(null);
+            if (imageFile == null) {
+                this.plugin.updateLogAndProcess(this.process.getId(),
+                        "Couldn't find the following file: " + this.importSet.getMediaFolder() + fileName, 3);
+            } else {
+                Path targetFolder = Paths.get(target);
+                if (!storageProvider.isFileExists(targetFolder)) {
+                    storageProvider.createDirectories(targetFolder);
+                }
+                if (Files.isReadable(imageFile)) {
+                    storageProvider.copyFile(imageFile, Paths.get(targetFolder.toString(), imageFile.getFileName().toString()));
+                } else {
+                    this.plugin.updateLogAndProcess(this.process.getId(),
+                            "Couldn't read the following file: " + this.importSet.getMediaFolder() + fileName, 3);
                 }
             }
         }

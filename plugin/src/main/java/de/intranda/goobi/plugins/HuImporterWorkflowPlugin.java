@@ -195,7 +195,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
                 String ead = field.getString("[@ead]", null);
                 String gndColumn = field.getString("[@gndColumn]", null);
-                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead, gndColumn));
+                String structureType = field.getString("[@structureType]", null);
+                String target = field.getString("[@target]", null);
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead, gndColumn,
+                        structureType, target));
             }
             return mappingFields;
         } catch (NullPointerException ex) {
@@ -605,15 +608,19 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 updateLog("Start importing: " + process.getTitel(), 1);
 
                                 if (processDescription != null && processDescription.getMetaDataMapping() != null) {
-
-                                    dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
-                                            imageFiles, nodeId);
                                     try {
+                                        dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
+                                                imageFiles, nodeId);
                                         dManager.addNodeIdToTopStruct(nodeId);
                                         dManager.addCatalogueId(nodeId);
                                     } catch (MetadataTypeNotAllowedException e) {
                                         updateLog(
                                                 "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
+                                                3);
+                                    } catch (TypeNotAllowedForParentException e) {
+                                        // this one catches an exception thrown by addMetadataFromRowToTopStruct
+                                        updateLog(
+                                                "Type not allowed for Parent! Couldn't add substructure for image files. Please update the ruleset!",
                                                 3);
                                     }
                                 }
@@ -631,20 +638,14 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         }
                                     }
 
-                                    // move parsed xls to processed folder
-                                    storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
-
                                 } else {
-                                    // move parsed xls to failure folder
-                                    storageProvider.move(processFile, Paths.get(failureFolder.toString(), processFile.getFileName().toString()));
-
                                     for (Step s : process.getSchritteList()) {
                                         if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum())) {
                                             s.setBearbeitungsstatusEnum(StepStatus.ERROR);
                                             break;
                                         }
                                     }
-                                    this.failedImports.add(processFile.getFileName().toString());
+                                    this.failedImports.add(processFile.getFileName().toString() + " ROW: " + row.getRowNum());
                                 }
 
                                 //if eadManager was used save Changes
@@ -683,6 +684,16 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         this.itemCurrent++;
                         this.progress = 100 * this.itemCurrent / this.itemsTotal;
                         updateLog("Processing of record done.");
+
+                        //end of document loop
+                        if (this.successful) {
+                            // move parsed xls to processed folder
+                            storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
+
+                        } else {
+                            // move parsed xls to failure folder
+                            storageProvider.move(processFile, Paths.get(failureFolder.toString(), processFile.getFileName().toString()));
+                        }
                     }
 
                     // finally last push
@@ -796,6 +807,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private boolean blankAfterSeparator;
         private String ead;
         private String gndColumn;
+        private String structureType;
+        private String target;
     }
 
     @Data

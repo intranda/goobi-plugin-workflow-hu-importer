@@ -295,7 +295,8 @@
         <field column="D" label="Prozessname" type="ProcessName"/>  
         -->
         
-        <field column="AP,AQ" label="Datei recto, Datei verso" type="media"/>
+        <field column="AP,AQ" label="Datei recto, Datei verso" type="media" structureType="Document"/>
+        <field column="AP,AQ" label="Datei recto, Datei verso" type="copy" target="{sourcepath}"/>
         <field column="AR" label="test" type="PublicationType"/>
         </mappingSet>
 
