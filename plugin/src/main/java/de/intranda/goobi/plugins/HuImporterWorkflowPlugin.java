@@ -729,7 +729,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public static boolean isRegularAndNotHidden(Path path) {
 
         try {
-            return !Files.isDirectory(path) && !Files.isHidden(path);
+            return !Files.isDirectory(path) && !Files.isHidden(path) && path.toString().endsWith(".xlsx");
         } catch (IOException e) {
             // if we can't open it we will not add it to the List
             return false;
