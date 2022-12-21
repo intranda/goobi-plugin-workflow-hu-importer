@@ -252,7 +252,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
             }
 
-            // if we are in row mode we don't need to read a description mapping set an can leave the pile of sh
+            // if we are in row mode we don't need to read a description mapping set an can leave
             if (importSet.isRowMode()) {
                 for (MappingField field : processDescription) {
                     processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
@@ -540,8 +540,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 // create list with files in metadata folder of importSet
                 List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
                 updateLog("Run through all import files");
-                this.itemsTotal = FilesToRead.size();
-                this.itemCurrent = 0;
                 Process process = null;
                 try {
 
@@ -551,6 +549,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     fileLoop: for (Path processFile : FilesToRead) {
                         XlsReader reader = new XlsReader(processFile.toString());
                         Sheet sheet = reader.getSheet();
+                        this.itemCurrent = 0;
+                        this.itemsTotal = sheet.getLastRowNum();
                         for (Row row : sheet) {
                             // skip rows until start row
                             if (row.getRowNum() < importSet.getRowStart() - 1) {
@@ -568,7 +568,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             if (!this.run) {
                                 break;
                             }
-                            updateLog("Datei: " + processFile.toString() + "Zeile: " + row.getRowNum());
+                            updateLog("Datei: " + processFile.toString() + " Zeile: " + row.getRowNum());
 
                             try {
                                 Set<Path> imageFiles = null;
@@ -678,12 +678,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     updateLog(message, 3);
                                 }
                             }
+                            // recalculate progress
+                            this.itemCurrent++;
+                            this.progress = 100 * this.itemCurrent / this.itemsTotal;
                         }
 
-                        // recalculate progress
-                        this.itemCurrent++;
-                        this.progress = 100 * this.itemCurrent / this.itemsTotal;
-                        updateLog("Processing of record done.");
+                        updateLog("Processing of " + processFile.getFileName() + " finished.", 2);
 
                         //end of document loop
                         if (this.successful) {
