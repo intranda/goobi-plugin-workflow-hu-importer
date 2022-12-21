@@ -100,12 +100,12 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     private void readConfiguration() {
         updateLog("Start reading the configuration");
-        config = ConfigPlugins.getPluginConfig(title);
+        this.config = ConfigPlugins.getPluginConfig(this.title);
 
         // read list of ImportSet configuration
-        importSets = new ArrayList<>();
+        this.importSets = new ArrayList<>();
         try {
-            List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
+            List<HierarchicalConfiguration> mappings = this.config.configurationsAt("importSet");
             for (HierarchicalConfiguration node : mappings) {
                 String name = node.getString("[@name]", null);
                 String metadataFolder = node.getString("[@metadataFolder]", null);
@@ -124,25 +124,27 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String eadFile = node.getString("[@eadFile]", null);
                 String eadNode = node.getString("[@eadNode]", null);
                 String eadSubnodeType = node.getString("[@eadSubnodeType]", null);
-                importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
-                        rowStart, rowEnd, processTitleMode, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType));
+                boolean processPerRow = node.getBoolean("[@processPerRow]", false);
+                this.importSets.add(new ImportSet(name, metadataFolder, mediaFolder, workflow, project, mappingSet, publicationType, structureType,
+                        rowStart, rowEnd, processTitleMode, importSetDescription, descriptionMappingSet, eadType, eadFile, eadNode, eadSubnodeType,
+                        processPerRow));
             }
 
             // write a log into the UI
             updateLog("Configuration successfully read");
         } catch (NullPointerException ex) {
             String logmessage = "Invalid ImportSet configuration. Mandatory parameter missing! Please correct the configuration file.";
-            importSets = new ArrayList<>();
+            this.importSets = new ArrayList<>();
             log.error(logmessage, ex);
             LogMessage message = new LogMessage(logmessage, 3);
-            logQueue.add(message);
-            errorList.add(message);
-            successful = false;
+            this.logQueue.add(message);
+            this.errorList.add(message);
+            this.successful = false;
 
             log.debug(logmessage);
-            if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
-                lastPush = System.currentTimeMillis();
-                pusher.send("update");
+            if (this.pusher != null && System.currentTimeMillis() - this.lastPush > 500) {
+                this.lastPush = System.currentTimeMillis();
+                this.pusher.send("update");
             }
         }
     }
@@ -151,7 +153,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * cancel a running import
      */
     public void cancel() {
-        run = false;
+        this.run = false;
     }
 
     /**
@@ -163,7 +165,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private List<MappingField> getMapping(String mappingName) {
         // find the correct mapping node
         HierarchicalConfiguration mappingNode = null;
-        for (HierarchicalConfiguration node : config.configurationsAt("mappingSet")) {
+        for (HierarchicalConfiguration node : this.config.configurationsAt("mappingSet")) {
             String name = node.getString("[@name]");
             if (name.equals(mappingName)) {
                 // log.debug("Configured mapping was found: " + name);
@@ -193,7 +195,10 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 boolean blankAfterSeparator = field.getBoolean("[@blankAfterSeparator]", false);
                 String ead = field.getString("[@ead]", null);
                 String gndColumn = field.getString("[@gndColumn]", null);
-                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead, gndColumn));
+                String structureType = field.getString("[@structureType]", null);
+                String target = field.getString("[@target]", null);
+                mappingFields.add(new MappingField(column, label, mets, type, separator, blankBeforeSeparator, blankAfterSeparator, ead, gndColumn,
+                        structureType, target));
             }
             return mappingFields;
         } catch (NullPointerException ex) {
@@ -212,17 +217,18 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param processFile
      * @return
      */
-    private ProcessDescription getProcessDescription(ImportSet importSet, Path processFile) {
-        Row processDescriptionRow = null;
-        if (importSet.getImportSetDescription() != null) {
-            List<MappingField> processMetadata = getMapping(importSet.getDescriptionMappingSet());
+    private ProcessDescription getProcessDescription(Row processRow, ImportSet importSet, Path processFile) {
+        Row processDescriptionRow = processRow;
+        String mappingSet = importSet.isRowMode() ? importSet.getMapping() : importSet.getDescriptionMappingSet();
+        if (importSet.getImportSetDescription() != null || processDescriptionRow != null) {
+            List<MappingField> processMetadata = getMapping(mappingSet);
             List<MappingField> processDescription = new ArrayList<>();
             HashMap<String, String> processProperties = new HashMap<>();
 
             MappingField fileNameColumn = null;
             if (processMetadata == null) {
-                updateLog("No valid ImportSetDescription with the Name: " + importSet.getDescriptionMappingSet() + " was found!", 3);
-                failedImports.add(processFile.getFileName().toString());
+                updateLog("No valid ImportSetDescription with the Name: " + mappingSet + " was found!", 3);
+                this.failedImports.add(processFile.getFileName().toString());
                 return null;
             }
 
@@ -246,6 +252,14 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
             }
 
+            // if we are in row mode we don't need to read a description mapping set an can leave
+            if (importSet.isRowMode()) {
+                for (MappingField field : processDescription) {
+                    processProperties.put(field.getType(), XlsReader.getCellContent(processDescriptionRow, field));
+                }
+                return new ProcessDescription(processDescriptionRow, processMetadata, processProperties, processFile.getFileName());
+            }
+
             if (fileNameColumn != null) {
                 try {
                     XlsReader reader = new XlsReader(importSet.getImportSetDescription());
@@ -264,7 +278,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         updateLog("A File with Processdescriptions was specified but the Filename (" + processFile.getFileName().toString()
                                 + ") was not found in " + importSet.getDescriptionMappingSet() + "!", 3);
                         updateLog("The Import of File: " + processFile.toString() + " will be scipped!", 3);
-                        failedImports.add(processFile.getFileName().toString());
+                        this.failedImports.add(processFile.getFileName().toString());
                         reader.closeWorkbook();
                         return null;
                     }
@@ -293,11 +307,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param importConfiguration
      */
     public void startImport(ImportSet importSet) {
-        errorList = new ArrayList<>();
-        failedImports = new ArrayList<>();
+        this.errorList = new ArrayList<>();
+        this.failedImports = new ArrayList<>();
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         updateLog("Start import for: " + importSet.getName());
-        progress = 0;
+        this.progress = 0;
 
         // read mappings
 
@@ -328,202 +342,380 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         // run the import in a separate thread to allow a dynamic progress bar
-        run = true;
-        Runnable runnable = () -> {
+        this.run = true;
+        Runnable runnable;
 
-            // create list with files in metadata folder of importSet
-            List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
-            updateLog("Run through all import files");
-            itemsTotal = FilesToRead.size();
-            itemCurrent = 0;
-            Process process = null;
-            try {
+        if (!importSet.isRowMode()) {
+            runnable = () -> {
 
-                if (FilesToRead.isEmpty()) {
-                    updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
-                }
-                for (Path processFile : FilesToRead) {
-                    successful = true;
-                    ProcessDescription processDescription = getProcessDescription(importSet, processFile);
-                    if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
-                        updateLog("A importSetDescription was configured but there were Errors getting the Description!", 3);
-                        continue;
+                // create list with files in metadata folder of importSet
+                List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
+                updateLog("Run through all import files");
+                this.itemsTotal = FilesToRead.size();
+                this.itemCurrent = 0;
+                Process process = null;
+                try {
+
+                    if (FilesToRead.isEmpty()) {
+                        updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
                     }
-
-                    Thread.sleep(100);
-                    if (!run) {
-                        break;
-                    }
-                    updateLog("Datei: " + processFile.toString());
-
-                    //Try to open File if IOException flies here, no process will be created
-                    XlsReader reader = new XlsReader(processFile.toString());
-                    Sheet sheet = reader.getSheet();
-
-                    try {
-                        Set<Path> imageFiles = null;
-                        if (importSet.getMediaFolder() != null) {
-                            // TODO catch IOException here!
-                            imageFiles = filterImagesInFolder(importSet.getMediaFolder());
-                        } else {
-                            // check if this is desired behavior!
-                            updateLog("No mediaFolder specified! Import aborted!", 3);
-                            failedImports.add(processFile.getFileName().toString());
+                    for (Path processFile : FilesToRead) {
+                        this.successful = true;
+                        ProcessDescription processDescription = getProcessDescription(null, importSet, processFile);
+                        if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
+                            updateLog("A importSetDescription was configured but there were Errors getting the Description!", 3);
                             continue;
                         }
-                        // create Process, DocumentManager and EadManager
-                        DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
-                        process = dManager.getProcess();
-                        EadManager eadManager = null;
-                        String nodeId = null;
-                        if (StringUtils.isNotBlank(importSet.getEadFile())) {
-                            eadManager = new EadManager(importSet, process.getTitel(), importSet.getProcessTitleMode());
-                            if (eadManager.isDbStatusOk()) {
-                                nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(), processDescription.getMetaDataMapping());
-                            } else {
-                                updateLog("Couldn't open baseX-DB as the database is locked! No EAD-Entries were generated for this process!", 3);
-                            }
+
+                        Thread.sleep(100);
+                        if (!this.run) {
+                            break;
                         }
-                        if (importSet.getProcessTitleMode().toUpperCase() == "EAD") {
-                            if (nodeId == null) {
-                                updateLog("processTitleMode EAD specified but no EAD NodeId was generated.", 3);
-                                failedImports.add(processFile.getFileName().toString());
+                        updateLog("Datei: " + processFile.toString());
+
+                        try {
+                            Set<Path> imageFiles = null;
+                            if (importSet.getMediaFolder() != null) {
+                                // TODO catch IOException here!
+                                imageFiles = filterImagesInFolder(importSet.getMediaFolder());
+                            } else {
+                                // check if this is desired behavior!
+                                updateLog("No mediaFolder specified! Import aborted!", 3);
+                                this.failedImports.add(processFile.getFileName().toString());
                                 continue;
                             }
-                            processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
-                        }
-
-                        updateLog("Start importing: " + process.getTitel(), 1);
-
-                        if (processDescription != null && processDescription.getMetaDataMapping() != null) {
-                            for (MappingField mapping : processDescription.getMetaDataMapping()) {
-                                try {
-                                    String cellContent = XlsReader.getCellContent(processDescription.getRow(), mapping);
-                                    String gndUri = null;
-                                    if (StringUtils.isNotBlank(mapping.getGndColumn())) {
-                                        gndUri = XlsReader.getCellContentSplit(processDescription.getRow(), mapping.getGndColumn());
-                                    }
-                                    dManager.addMetaDataToTopStruct(mapping, cellContent, gndUri);
-                                } catch (MetadataTypeNotAllowedException e) {
-                                    updateLog("Invalid Mapping for Field " + mapping.getType() + " with Mets " + mapping.getMets() + " in MappingSet "
-                                            + importSet.getDescriptionMappingSet(), 3);
+                            // create Process, DocumentManager and EadManager
+                            DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
+                            process = dManager.getProcess();
+                            EadManager eadManager = null;
+                            String nodeId = null;
+                            if (StringUtils.isNotBlank(importSet.getEadFile())) {
+                                eadManager = new EadManager(importSet, process.getTitel(), importSet.getProcessTitleMode());
+                                if (eadManager.isDbStatusOk()) {
+                                    nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(),
+                                            processDescription.getMetaDataMapping());
+                                } else {
+                                    updateLog("Couldn't open baseX-DB as the database is locked! No EAD-Entries were generated for this process!", 3);
                                 }
                             }
-                            try {
-                                dManager.addNodeIdToTopStruct(nodeId);
-                                dManager.addCatalogueId(nodeId);
-                            } catch (MetadataTypeNotAllowedException e) {
-                                updateLog(
-                                        "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
-                                        3);
+                            if (importSet.getProcessTitleMode().toUpperCase() == "EAD") {
+                                if (nodeId == null) {
+                                    updateLog("processTitleMode EAD specified but no EAD NodeId was generated.", 3);
+                                    this.failedImports.add(processFile.getFileName().toString());
+                                    continue;
+                                }
+                                processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
+                            }
+
+                            updateLog("Start importing: " + process.getTitel(), 1);
+
+                            if (processDescription != null && processDescription.getMetaDataMapping() != null) {
+
+                                dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
+                                        imageFiles, nodeId);
+                                try {
+                                    dManager.addNodeIdToTopStruct(nodeId);
+                                    dManager.addCatalogueId(nodeId);
+                                } catch (MetadataTypeNotAllowedException e) {
+                                    updateLog(
+                                            "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
+                                            3);
+                                }
+                            }
+
+                            //Try to open File if IOException flies here, no process will be created
+                            XlsReader reader = new XlsReader(processFile.toString());
+                            Sheet sheet = reader.getSheet();
+                            for (Row row : sheet) {
+                                // skip rows until start row
+                                if (row.getRowNum() < importSet.getRowStart() - 1) {
+                                    continue;
+                                }
+                                String subnodeId = null;
+                                //only add ead subnodes if a SubnodeType is specified
+                                if (StringUtils.isNotBlank(importSet.getEadSubnodeType()) && eadManager.isDbStatusOk()) {
+                                    subnodeId = eadManager.addSubnodeWithMetaData(row, mappingFields);
+                                }
+                                // end parsing after end row number
+                                if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd()) {
+                                    break;
+                                }
+
+                                // create the metadata fields by reading the config (and get content from the
+                                // content files of course)
+                                dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
+
+                            }
+                            // close workbook
+                            reader.closeWorkbook();
+
+                            // write the metsfile
+                            dManager.writeMetadataFile();
+                            updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID: " + process.getId(),
+                                    1);
+                            if (this.successful) {
+                                // start any open automatic tasks for the created process
+                                for (Step s : process.getSchritteList()) {
+                                    if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum()) && s.isTypAutomatisch()) {
+                                        ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                                        myThread.startOrPutToQueue();
+                                    }
+                                }
+
+                                // move parsed xls to processed folder
+                                storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
+
+                            } else {
+                                // move parsed xls to failure folder
+                                storageProvider.move(processFile, Paths.get(failureFolder.toString(), processFile.getFileName().toString()));
+
+                                for (Step s : process.getSchritteList()) {
+                                    if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum())) {
+                                        s.setBearbeitungsstatusEnum(StepStatus.ERROR);
+                                        break;
+                                    }
+                                }
+                                this.failedImports.add(processFile.getFileName().toString());
+                            }
+
+                            //if eadManager was used save Changes
+                            if (eadManager != null && eadManager.isDbStatusOk()) {
+                                eadManager.saveArchiveAndLeave();
+                            }
+                            dManager.saveProcess();
+
+                        } catch (ProcessCreationException e) {
+                            // Shouldn't we end the import here??
+                            log.error("Error creating a process during the import", e);
+                            updateLog("Error creating a process during the import: " + e.getMessage(), 3);
+                        } catch (IOException | TypeNotAllowedAsChildException | TypeNotAllowedForParentException | PreferencesException
+                                | SwapException | WriteException | DAOException e) {
+
+                            String message = (process != null) ? "Error mapping and importing data during the import of process: "
+                                    : "Error creating a process during import";
+
+                            log.error("Error  during the import for process", e);
+                            if (process != null) {
+                                message = message + process.getTitel() + " " + e.getMessage();
+                                updateLogAndProcess(process.getId(), message, 3);
+                                try {
+                                    ProcessManager.saveProcess(process);
+                                } catch (DAOException e1) {
+
+                                    e1.printStackTrace();
+                                }
+                            } else {
+                                updateLog(message, 3);
                             }
                         }
+
+                        // recalculate progress
+                        this.itemCurrent++;
+                        this.progress = 100 * this.itemCurrent / this.itemsTotal;
+                        updateLog("Processing of record done.");
+                    }
+
+                    // finally last push
+                    this.run = false;
+                    Thread.sleep(1000);
+                    updateLog("Import completed.", 2);
+                    if (this.failedImports.size() > 0) {
+                        updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
+                        updateLog(this.failedImports.size() + " Import(s) finished with errors!", 3);
+                        this.failedImports.forEach((importFile) -> {
+                            updateLog(importFile, 3);
+                        });
+                    }
+
+                } catch (InterruptedException e) {
+                    Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
+                    log.error("Error trying to execute the import", e);
+
+                }
+
+                this.pusher.send("summary");
+            };
+        } else {
+            runnable = () -> {
+                // create list with files in metadata folder of importSet
+                List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
+                updateLog("Run through all import files");
+                Process process = null;
+                try {
+
+                    if (FilesToRead.isEmpty()) {
+                        updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
+                    }
+                    fileLoop: for (Path processFile : FilesToRead) {
+                        XlsReader reader = new XlsReader(processFile.toString());
+                        Sheet sheet = reader.getSheet();
+                        this.itemCurrent = 0;
+                        this.itemsTotal = sheet.getLastRowNum();
                         for (Row row : sheet) {
                             // skip rows until start row
                             if (row.getRowNum() < importSet.getRowStart() - 1) {
                                 continue;
                             }
-                            String subnodeId = null;
-                            //only add ead subnodes if a SubnodeType is specified
-                            if (StringUtils.isNotBlank(importSet.getEadSubnodeType()) && eadManager.isDbStatusOk()) {
-                                subnodeId = eadManager.addSubnodeWithMetaData(row, mappingFields);
+
+                            this.successful = true;
+                            ProcessDescription processDescription = getProcessDescription(row, importSet, processFile);
+                            if (processDescription == null) {
+                                updateLog("Error reading Process metadata from row: " + row.getRowNum(), 3);
+                                continue;
                             }
-                            // end parsing after end row number
-                            if (importSet.getRowEnd() != 0 && row.getRowNum() > importSet.getRowEnd()) {
+
+                            Thread.sleep(100);
+                            if (!this.run) {
                                 break;
                             }
+                            updateLog("Datei: " + processFile.toString() + " Zeile: " + row.getRowNum());
 
-                            // create the metadata fields by reading the config (and get content from the
-                            // content files of course)
-                            dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
-                        }
-                        // close workbook
-                        reader.closeWorkbook();
-                        // write the metsfile
-                        dManager.writeMetadataFile();
-                        updateLogAndProcess(process.getId(), "Process automatically created by " + getTitle() + " with ID: " + process.getId(), 1);
-                        if (successful) {
-                            // start any open automatic tasks for the created process
-                            for (Step s : process.getSchritteList()) {
-                                if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum()) && s.isTypAutomatisch()) {
-                                    ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
-                                    myThread.startOrPutToQueue();
+                            try {
+                                Set<Path> imageFiles = null;
+                                if (importSet.getMediaFolder() != null) {
+                                    // TODO catch IOException here!
+                                    imageFiles = filterImagesInFolder(importSet.getMediaFolder());
+                                } else {
+                                    // check if this is desired behavior!
+                                    updateLog("No mediaFolder specified! Import aborted!", 3);
+                                    this.failedImports.add(processFile.getFileName().toString());
+                                    continue fileLoop;
+                                }
+                                // create Process, DocumentManager and EadManager
+                                DocumentManager dManager = new DocumentManager(processDescription, importSet, this);
+                                process = dManager.getProcess();
+                                EadManager eadManager = null;
+                                String nodeId = null;
+                                if (StringUtils.isNotBlank(importSet.getEadFile())) {
+                                    eadManager = new EadManager(importSet, process.getTitel(), importSet.getProcessTitleMode());
+                                    if (eadManager.isDbStatusOk()) {
+                                        nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(),
+                                                processDescription.getMetaDataMapping());
+                                    } else {
+                                        updateLog("Couldn't open baseX-DB as the database is locked! No EAD-Entries were generated for this process!",
+                                                3);
+                                    }
+                                }
+                                if (importSet.getProcessTitleMode().toUpperCase() == "EAD") {
+                                    if (nodeId == null) {
+                                        updateLog("processTitleMode EAD specified but no EAD NodeId was generated.", 3);
+                                        this.failedImports.add(processFile.getFileName().toString());
+                                        continue;
+                                    }
+                                    processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
+                                }
+
+                                updateLog("Start importing: " + process.getTitel(), 1);
+
+                                if (processDescription != null && processDescription.getMetaDataMapping() != null) {
+                                    try {
+                                        dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
+                                                imageFiles, nodeId);
+                                        dManager.addNodeIdToTopStruct(nodeId);
+                                        dManager.addCatalogueId(nodeId);
+                                    } catch (MetadataTypeNotAllowedException e) {
+                                        updateLog(
+                                                "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
+                                                3);
+                                    } catch (TypeNotAllowedForParentException e) {
+                                        // this one catches an exception thrown by addMetadataFromRowToTopStruct
+                                        updateLog(
+                                                "Type not allowed for Parent! Couldn't add substructure for image files. Please update the ruleset!",
+                                                3);
+                                    }
+                                }
+                                // write the metsfile
+                                dManager.writeMetadataFile();
+                                updateLogAndProcess(process.getId(),
+                                        "Process automatically created by " + getTitle() + " with ID: " + process.getId(), 1);
+
+                                if (this.successful) {
+                                    // start any open automatic tasks for the created process
+                                    for (Step s : process.getSchritteList()) {
+                                        if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum()) && s.isTypAutomatisch()) {
+                                            ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                                            myThread.startOrPutToQueue();
+                                        }
+                                    }
+
+                                } else {
+                                    for (Step s : process.getSchritteList()) {
+                                        if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum())) {
+                                            s.setBearbeitungsstatusEnum(StepStatus.ERROR);
+                                            break;
+                                        }
+                                    }
+                                    this.failedImports.add(processFile.getFileName().toString() + " ROW: " + row.getRowNum());
+                                }
+
+                                //if eadManager was used save Changes
+                                if (eadManager != null && eadManager.isDbStatusOk()) {
+                                    eadManager.saveArchiveAndLeave();
+                                }
+                                dManager.saveProcess();
+
+                            } catch (ProcessCreationException e) {
+                                // Shouldn't we end the import here??
+                                log.error("Error creating a process during the import", e);
+                                updateLog("Error creating a process during the import: " + e.getMessage(), 3);
+                            } catch (IOException | TypeNotAllowedAsChildException | PreferencesException | SwapException | WriteException
+                                    | DAOException e) {
+
+                                String message = (process != null) ? "Error mapping and importing data during the import of process: "
+                                        : "Error creating a process during import";
+
+                                log.error("Error  during the import for process", e);
+                                if (process != null) {
+                                    message = message + process.getTitel() + " " + e.getMessage();
+                                    updateLogAndProcess(process.getId(), message, 3);
+                                    try {
+                                        ProcessManager.saveProcess(process);
+                                    } catch (DAOException e1) {
+
+                                        e1.printStackTrace();
+                                    }
+                                } else {
+                                    updateLog(message, 3);
                                 }
                             }
+                            // recalculate progress
+                            this.itemCurrent++;
+                            this.progress = 100 * this.itemCurrent / this.itemsTotal;
+                        }
 
+                        updateLog("Processing of " + processFile.getFileName() + " finished.", 2);
+
+                        //end of document loop
+                        if (this.successful) {
                             // move parsed xls to processed folder
                             storageProvider.move(processFile, Paths.get(processedFolder.toString(), processFile.getFileName().toString()));
 
                         } else {
                             // move parsed xls to failure folder
                             storageProvider.move(processFile, Paths.get(failureFolder.toString(), processFile.getFileName().toString()));
-
-                            for (Step s : process.getSchritteList()) {
-                                if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum())) {
-                                    s.setBearbeitungsstatusEnum(StepStatus.ERROR);
-                                    break;
-                                }
-                            }
-                            failedImports.add(processFile.getFileName().toString());
-                        }
-
-                        //if eadManager was used save Changes
-                        if (eadManager != null && eadManager.isDbStatusOk()) {
-                            eadManager.saveArchiveAndLeave();
-                        }
-                        dManager.saveProcess();
-
-                    } catch (ProcessCreationException e) {
-                        // Shouldn't we end the import here??
-                        log.error("Error creating a process during the import", e);
-                        updateLog("Error creating a process during the import: " + e.getMessage(), 3);
-                    } catch (IOException | TypeNotAllowedAsChildException | TypeNotAllowedForParentException | PreferencesException | SwapException
-                            | WriteException | DAOException e) {
-
-                        String message = (process != null) ? "Error mapping and importing data during the import of process: "
-                                : "Error creating a process during import";
-
-                        log.error("Error  during the import for process", e);
-                        if (process != null) {
-                            message = message + process.getTitel() + " " + e.getMessage();
-                            updateLogAndProcess(process.getId(), message, 3);
-                            try {
-                                ProcessManager.saveProcess(process);
-                            } catch (DAOException e1) {
-
-                                e1.printStackTrace();
-                            }
-                        } else {
-                            updateLog(message, 3);
                         }
                     }
 
-                    // recalculate progress
-                    itemCurrent++;
-                    progress = 100 * itemCurrent / itemsTotal;
-                    updateLog("Processing of record done.");
+                    // finally last push
+                    this.run = false;
+                    Thread.sleep(1000);
+                    updateLog("Import completed.", 2);
+                    if (this.failedImports.size() > 0) {
+                        updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
+                        updateLog(this.failedImports.size() + " Import(s) finished with errors!", 3);
+                        this.failedImports.forEach((importFile) -> {
+                            updateLog(importFile, 3);
+                        });
+                    }
+
+                } catch (InterruptedException | IOException e) {
+                    Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
+                    log.error("Error trying to execute the import", e);
                 }
 
-                // finally last push
-                run = false;
-                Thread.sleep(1000);
-                updateLog("Import completed.", 2);
-                if (failedImports.size() > 0) {
-                    updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
-                    updateLog(failedImports.size() + " Import(s) finished with errors!", 3);
-                    failedImports.forEach((importFile) -> {
-                        updateLog(importFile, 3);
-                    });
-                }
-
-            } catch (InterruptedException | IOException e) {
-                Helper.setFehlerMeldung("Error while trying to execute the import: " + e.getMessage());
-                log.error("Error trying to execute the import", e);
-
-            }
-
-            pusher.send("summary");
-        };
+                this.pusher.send("summary");
+            };
+        }
         new Thread(runnable).start();
 
     }
@@ -589,15 +781,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      */
     public void updateLog(String logmessage, int level) {
         LogMessage message = new LogMessage(logmessage, level);
-        logQueue.add(message);
+        this.logQueue.add(message);
         if (level == 3) {
-            errorList.add(message);
-            successful = false;
+            this.errorList.add(message);
+            this.successful = false;
         }
         log.debug(logmessage);
-        if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
-            lastPush = System.currentTimeMillis();
-            pusher.send("update");
+        if (this.pusher != null && System.currentTimeMillis() - this.lastPush > 500) {
+            this.lastPush = System.currentTimeMillis();
+            this.pusher.send("update");
         }
     }
 
@@ -615,6 +807,8 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private boolean blankAfterSeparator;
         private String ead;
         private String gndColumn;
+        private String structureType;
+        private String target;
     }
 
     @Data
@@ -643,6 +837,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String eadFile;
         private String eadNode;
         private String eadSubnodeType;
+        private boolean rowMode;
     }
 
     @Data

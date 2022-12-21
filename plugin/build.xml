@@ -6,10 +6,18 @@
 	<!-- Use this task to let ant copy the compiled jar files to the target folders for development  -->
 	<target name="devbuild">
 		<exec executable="mvn">
-			<arg value="package"/>
+			<arg value="package" />
 		</exec>
-		<copy file="module-main/target/plugin_intranda_workflow_${name}.jar" todir="/opt/digiverso/goobi/plugins/workflow/" overwrite="true"/>
-		<copy file="module-gui/target/plugin_intranda_workflow_${name}-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/" overwrite="true"/>
+		<copy file="module-main/target/plugin_intranda_workflow_${name}.jar" todir="/opt/digiverso/goobi/plugins/workflow/" overwrite="true" />
+		<copy file="module-gui/target/plugin_intranda_workflow_${name}-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/" overwrite="true" />
 	</target>
 
+	<!-- Use this task to let ant copy the compiled jar files to the target folders for development  -->
+	<target name="g2gbuild">
+		<exec executable="mvn">
+			<arg value="package" />
+		</exec>
+		<copy file="module-main/target/plugin_intranda_workflow_${name}.jar" todir="/opt/digiverso/g2g/workspace/workflow/plugins/workflow/" overwrite="true" />
+		<copy file="module-gui/target/plugin_intranda_workflow_${name}-GUI.jar" todir="/opt/digiverso/g2g/workspace/workflow/plugins/GUI/" overwrite="true" />
+	</target>
 </project>

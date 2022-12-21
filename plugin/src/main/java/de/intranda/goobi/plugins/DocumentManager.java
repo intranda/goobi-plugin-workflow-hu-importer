@@ -22,12 +22,14 @@ import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.StorageProviderInterface;
+import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.ProjectManager;
 import lombok.Getter;
 import ugh.dl.ContentFile;
+import ugh.dl.Corporate;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.DocStructType;
@@ -59,6 +61,7 @@ public class DocumentManager {
     private ImportSet importSet;
     private int PageCount = 0;
     private DocStruct structure;
+    private VariableReplacer replacer;
 
     public DocumentManager(ProcessDescription processDescription, ImportSet importSet, HuImporterWorkflowPlugin plugin)
             throws ProcessCreationException {
@@ -115,7 +118,16 @@ public class DocumentManager {
             DocStruct physical = dd.createDocStruct(this.prefs.getDocStrctTypeByName("BoundBook"));
             dd.setPhysicalDocStruct(physical);
 
-            DocStructType dstype = this.prefs.getDocStrctTypeByName(importSet.getPublicationType());
+            // try to use publicationtype from xlsx if it wasn't specified use fallback type from importset
+
+            String publicationType = importSet.getPublicationType();
+            if (processProperties != null) {
+                String publicationTypeTemp = processProperties.get(ProcessProperties.PUBLICATIONTYPE.toString());
+                if (StringUtils.isNotBlank(publicationTypeTemp)) {
+                    publicationType = publicationTypeTemp;
+                }
+            }
+            DocStructType dstype = this.prefs.getDocStrctTypeByName(publicationType);
             if (dstype == null) {
                 throw new ProcessCreationException("Couldn't find publication type: " + importSet.getPublicationType() + " in the ruleset.");
             }
@@ -148,6 +160,8 @@ public class DocumentManager {
             this.digitalDocument = this.fileformat.getDigitalDocument();
             this.logical = this.digitalDocument.getLogicalDocStruct();
             this.physical = this.digitalDocument.getPhysicalDocStruct();
+            //initialize variable replacer
+            this.replacer = new VariableReplacer(this.fileformat.getDigitalDocument(), this.prefs, this.process, null);
 
             // add imagepath:
             Metadata imagePath = new Metadata(this.prefs.getMetadataTypeByName("pathimagefiles"));
@@ -161,43 +175,52 @@ public class DocumentManager {
     }
 
     public void addNodeIdToTopStruct(String nodeId) throws MetadataTypeNotAllowedException {
-        addNodeId(logical, nodeId);
+        addNodeId(this.logical, nodeId);
     }
 
     public void addCatalogueId(String id) throws MetadataTypeNotAllowedException {
         if (StringUtils.isNotBlank(id)) {
-            Metadata cid = new Metadata(prefs.getMetadataTypeByName("CatalogIDDigital"));
+            Metadata cid = new Metadata(this.prefs.getMetadataTypeByName("CatalogIDDigital"));
             cid.setValue(id);
-            logical.addMetadata(cid);
+            this.logical.addMetadata(cid);
         }
     }
 
     private void addNodeId(DocStruct ds, String nodeId) throws MetadataTypeNotAllowedException {
         if (StringUtils.isNotBlank(nodeId)) {
-            Metadata nodeid = new Metadata(prefs.getMetadataTypeByName("NodeId"));
+            Metadata nodeid = new Metadata(this.prefs.getMetadataTypeByName("NodeId"));
             nodeid.setValue(nodeId);
             ds.addMetadata(nodeid);
         }
     }
 
-    public void addMetaDataToTopStruct(MappingField mappingField, String cellContent, String gndUri)
-            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-        addMetadata(logical, mappingField, cellContent, gndUri);
-    }
+    //    public void addMetaDataToTopStruct(MappingField mappingField, String cellContent, String gndUri)
+    //            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+    //        addMetadata(this.logical, mappingField, cellContent, gndUri);
+    //    }
 
-    public void addMetadataToStructure(MappingField mappingField, String cellContent, String gndUri)
-            throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-        addMetadata(structure, mappingField, cellContent, gndUri);
-    }
+    //    public void addMetadataToStructure(MappingField mappingField, String cellContent, String gndUri)
+    //            throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+    //        addMetadata(this.structure, mappingField, cellContent, gndUri);
+    //    }
 
-    public void createStructure(String structType) throws TypeNotAllowedForParentException {
-        DocStructType dsType = prefs.getDocStrctTypeByName(structType);
+    private DocStruct createStructure(String structType) throws TypeNotAllowedForParentException {
+        DocStructType dsType = this.prefs.getDocStrctTypeByName(structType);
         if (dsType != null) {
-            structure = digitalDocument.createDocStruct(dsType);
+            return this.digitalDocument.createDocStruct(dsType);
         } else {
-            plugin.updateLogAndProcess(process.getId(), "Couldn't find DocStruct type: " + structType + " in the ruleset.", 3);
+            this.plugin.updateLogAndProcess(this.process.getId(), "Couldn't find DocStruct type: " + structType + " in the ruleset.", 3);
             throw new TypeNotAllowedForParentException("Couldn't find DocStruct type:" + structType + " in the ruleset.");
         }
+    }
+
+    public void setStructure(String structType) throws TypeNotAllowedForParentException {
+        this.structure = createStructure(structType);
+    }
+
+    protected void addMetadataFromRowToTopStruct(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
+            throws TypeNotAllowedAsChildException, IOException, SwapException, DAOException, TypeNotAllowedForParentException {
+        addMetadataFromRow(this.logical, row, mappingFields, imageFiles, nodeId);
     }
 
     public void createStructureWithMetaData(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
@@ -205,15 +228,20 @@ public class DocumentManager {
         // look if structureType is defined in table
         MappingField mFieldStructureType =
                 mappingFields.stream().filter(mappingField -> "structureType".equals(mappingField.getType())).findFirst().orElse(null);
-        String structureType = importSet.getStructureType();
+        String structureType = this.importSet.getStructureType();
         if (mFieldStructureType != null) {
             String cellContentType = XlsReader.getCellContent(row, mFieldStructureType);
             if (StringUtils.isNotEmpty(cellContentType)) {
                 structureType = cellContentType;
             }
         }
-        createStructure(structureType);
+        setStructure(structureType);
+        addMetadataFromRow(this.structure, row, mappingFields, imageFiles, nodeId);
+        this.logical.addChild(this.structure);
+    }
 
+    protected void addMetadataFromRow(DocStruct docStruct, Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
+            throws IOException, SwapException, DAOException, TypeNotAllowedAsChildException, TypeNotAllowedForParentException {
         for (MappingField mappingField : mappingFields) {
 
             String cellContent = XlsReader.getCellContent(row, mappingField);
@@ -223,33 +251,48 @@ public class DocumentManager {
             }
             if (StringUtils.isNotBlank(mappingField.getType()) && StringUtils.isNotBlank(cellContent)) {
                 if ("media".equals(mappingField.getType().trim())) {
-                    addMediaFile(mappingField, cellContent, imageFiles);
+                    if (importSet.isRowMode() && StringUtils.isNotBlank(mappingField.getStructureType())) {
+                        DocStruct imageContainer = createStructure(importSet.getStructureType());
+                        docStruct.addChild(imageContainer);
+                        addMediaFile(imageContainer, mappingField, cellContent, imageFiles);
+                    } else {
+                        addMediaFile(docStruct, mappingField, cellContent, imageFiles);
+                    }
+                } else if ("copy".equals(mappingField.getType().trim())) {
+                    // copy files to target folder
+                    if (StringUtils.isNotBlank(mappingField.getTarget()) && StringUtils.isNotBlank(this.importSet.getMediaFolder())) {
+                        String target = this.replacer.replace(mappingField.getTarget());
+                        copyFileToTarget(target, mappingField, cellContent, imageFiles);
+
+                    } else {
+                        this.plugin.updateLogAndProcess(this.process.getId(),
+                                "Type copy was used but no target (field/mapping) or no mediafolder (Importset) was specified.", 3);
+                    }
                 } else {
                     try {
-                        addMetadataToStructure(mappingField, cellContent, gndUri);
+                        addMetadata(docStruct, mappingField, cellContent, gndUri);
                     } catch (MetadataTypeNotAllowedException e) {
-                        plugin.updateLogAndProcess(process.getId(), "Invalid Mapping for Field " + mappingField.getType() + " in MappingSet "
-                                + importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
+                        this.plugin.updateLogAndProcess(this.process.getId(), "Invalid Mapping for Field " + mappingField.getType()
+                                + " in MappingSet " + this.importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
                     }
                 }
             }
         }
         try {
-            addNodeId(structure, nodeId);
+            addNodeId(docStruct, nodeId);
         } catch (MetadataTypeNotAllowedException e) {
-            plugin.updateLogAndProcess(process.getId(),
+            this.plugin.updateLogAndProcess(this.process.getId(),
                     "Metadata field definition for nodeId is missing in the structure type (needed to link document with ead-nodes)! Please update the ruleset.",
                     3);
         }
-        logical.addChild(structure);
     }
 
     public void saveProcess() throws DAOException {
-        ProcessManager.saveProcess(process);
+        ProcessManager.saveProcess(this.process);
     }
 
     private Person createPerson(String cellContent, MappingField mappingField) throws MetadataTypeNotAllowedException {
-        Person p = new Person(prefs.getMetadataTypeByName(mappingField.getMets()));
+        Person p = new Person(this.prefs.getMetadataTypeByName(mappingField.getMets()));
         int index = cellContent.indexOf(mappingField.getSeparator());
         String firstpart;
         String lastpart;
@@ -283,19 +326,18 @@ public class DocumentManager {
      * @param process
      * @return
      * @throws MetadataTypeNotAllowedException
-     * @throws TypeNotAllowedAsChildException
      */
-    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent, String gndUri)
-            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
+    private void addMetadata(DocStruct ds, MappingField mappingField, String cellContent, String gndUri) throws MetadataTypeNotAllowedException {
         switch (mappingField.getType()) {
             case "person":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
-                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the mapping " + importSet.getMapping(), 3);
+                        this.plugin.updateLogAndProcess(this.process.getId(),
+                                "No Mets provided. Please update the mapping " + this.importSet.getMapping(), 3);
                     }
                     return;
                 }
-                plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
+                this.plugin.updateLog("Add person '" + mappingField.getMets() + "' with value '" + cellContent + "'");
                 Person p = createPerson(cellContent, mappingField);
                 if (mappingField.getGndColumn() != null) {
                     setAuthorityFile(p, gndUri);
@@ -305,11 +347,12 @@ public class DocumentManager {
             case "metadata":
                 if (StringUtils.isBlank(mappingField.getMets())) {
                     if (StringUtils.isBlank(mappingField.getEad())) {
-                        plugin.updateLogAndProcess(process.getId(), "No Mets provided. Please update the mapping " + importSet.getMapping(), 3);
+                        this.plugin.updateLogAndProcess(this.process.getId(),
+                                "No Mets provided. Please update the mapping " + this.importSet.getMapping(), 3);
                     }
                     return;
                 }
-                Metadata md = new Metadata(prefs.getMetadataTypeByName(mappingField.getMets()));
+                Metadata md = new Metadata(this.prefs.getMetadataTypeByName(mappingField.getMets()));
                 md.setValue(cellContent);
                 if (mappingField.getGndColumn() != null) {
                     setAuthorityFile(md, gndUri);
@@ -317,9 +360,20 @@ public class DocumentManager {
                 try {
                     ds.addMetadata(md);
                 } catch (DocStructHasNoTypeException ex) {
-                    plugin.updateLogAndProcess(process.getId(),
+                    this.plugin.updateLogAndProcess(this.process.getId(),
                             "DocStruct has no type! This may happen if you specified an invalid type (i.e. Chapter) for sub elements", 3);
                 }
+                break;
+            case "corporate":
+                Corporate corp = new Corporate(this.prefs.getMetadataTypeByName(mappingField.getMets()));
+                corp.setMainName(cellContent);
+                ds.addCorporate(corp);
+                if (mappingField.getGndColumn() != null) {
+                    setAuthorityFile(corp, gndUri);
+                }
+                break;
+            case "copy":
+                //do nothing
                 break;
             case "FileName":
                 //do nothhing
@@ -328,12 +382,13 @@ public class DocumentManager {
                 //do nothing
                 break;
             default:
-                plugin.updateLogAndProcess(process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
+                this.plugin.updateLogAndProcess(this.process.getId(), "the specified type: " + mappingField.getType() + " is not supported", 3);
                 return;
         }
     }
 
-    private void addMediaFile(MappingField mappingField, String cellContent, Set<Path> imageFiles) throws IOException, SwapException, DAOException {
+    private void addMediaFile(DocStruct structure, MappingField mappingField, String cellContent, Set<Path> imageFiles)
+            throws IOException, SwapException, DAOException {
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         String[] imageFileNames = cellContent.split(mappingField.getSeparator());
         for (String imageFileName : imageFileNames) {
@@ -342,20 +397,49 @@ public class DocumentManager {
             }
             Path imageFile = imageFiles.stream().filter(path -> path.getFileName().toString().equals(imageFileName.trim())).findFirst().orElse(null);
             if (imageFile == null) {
-                plugin.updateLogAndProcess(process.getId(), "Couldn't find the following file: " + importSet.getMediaFolder() + imageFileName, 3);
+                this.plugin.updateLogAndProcess(this.process.getId(),
+                        "Couldn't find the following file: " + this.importSet.getMediaFolder() + imageFileName, 3);
             } else {
-                Path masterFolder = Paths.get(process.getImagesOrigDirectory(false));
+                Path masterFolder = Paths.get(this.process.getImagesOrigDirectory(false));
                 if (!storageProvider.isFileExists(masterFolder)) {
                     storageProvider.createDirectories(masterFolder);
                 }
                 if (Files.isReadable(imageFile)) {
                     storageProvider.copyFile(imageFile, Paths.get(masterFolder.toString(), imageFile.getFileName().toString()));
                     if (!addPage(structure, imageFile.toFile())) {
-                        plugin.updateLogAndProcess(process.getId(), "Couldn't add page to structure", 3);
+                        this.plugin.updateLogAndProcess(this.process.getId(), "Couldn't add page to structure", 3);
                     }
 
                 } else {
-                    plugin.updateLogAndProcess(process.getId(), "Couldn't read the following file: " + importSet.getMediaFolder() + imageFileName, 3);
+                    this.plugin.updateLogAndProcess(this.process.getId(),
+                            "Couldn't read the following file: " + this.importSet.getMediaFolder() + imageFileName, 3);
+                }
+            }
+        }
+    }
+
+    private void copyFileToTarget(String target, MappingField mappingField, String cellContent, Set<Path> imageFiles)
+            throws IOException, SwapException, DAOException {
+        StorageProviderInterface storageProvider = StorageProvider.getInstance();
+        String[] fileNames = cellContent.split(mappingField.getSeparator());
+        for (String fileName : fileNames) {
+            if (StringUtils.isBlank(fileName)) {
+                continue;
+            }
+            Path imageFile = imageFiles.stream().filter(path -> path.getFileName().toString().equals(fileName.trim())).findFirst().orElse(null);
+            if (imageFile == null) {
+                this.plugin.updateLogAndProcess(this.process.getId(),
+                        "Couldn't find the following file: " + this.importSet.getMediaFolder() + fileName, 3);
+            } else {
+                Path targetFolder = Paths.get(target);
+                if (!storageProvider.isFileExists(targetFolder)) {
+                    storageProvider.createDirectories(targetFolder);
+                }
+                if (Files.isReadable(imageFile)) {
+                    storageProvider.copyFile(imageFile, Paths.get(targetFolder.toString(), imageFile.getFileName().toString()));
+                } else {
+                    this.plugin.updateLogAndProcess(this.process.getId(),
+                            "Couldn't read the following file: " + this.importSet.getMediaFolder() + fileName, 3);
                 }
             }
         }
@@ -371,18 +455,18 @@ public class DocumentManager {
      */
     private boolean addPage(DocStruct ds, File imageFile) {
         try {
-            DocStructType newPage = prefs.getDocStrctTypeByName("page");
-            DocStruct dsPage = digitalDocument.createDocStruct(newPage);
-            PageCount++;
+            DocStructType newPage = this.prefs.getDocStrctTypeByName("page");
+            DocStruct dsPage = this.digitalDocument.createDocStruct(newPage);
+            this.PageCount++;
             // physical page no
-            physical.addChild(dsPage);
-            MetadataType mdt = prefs.getMetadataTypeByName("physPageNumber");
+            this.physical.addChild(dsPage);
+            MetadataType mdt = this.prefs.getMetadataTypeByName("physPageNumber");
             Metadata mdTemp = new Metadata(mdt);
-            mdTemp.setValue(String.valueOf(PageCount));
+            mdTemp.setValue(String.valueOf(this.PageCount));
             dsPage.addMetadata(mdTemp);
 
             // logical page no
-            mdt = prefs.getMetadataTypeByName("logicalPageNumber");
+            mdt = this.prefs.getMetadataTypeByName("logicalPageNumber");
             mdTemp = new Metadata(mdt);
 
             mdTemp.setValue("uncounted");
@@ -396,15 +480,15 @@ public class DocumentManager {
             cf.setLocation("file://" + imageFile.getName());
 
             dsPage.addContentFile(cf);
-            if (PageCount % 10 == 0) {
-                plugin.updateLog("Created " + PageCount + " physical Pages for Process with Id: " + process.getId());
+            if (this.PageCount % 10 == 0) {
+                this.plugin.updateLog("Created " + this.PageCount + " physical Pages for Process with Id: " + this.process.getId());
             }
             return true;
         } catch (TypeNotAllowedAsChildException | TypeNotAllowedForParentException e) {
-            plugin.updateLogAndProcess(1, "Error creating page - type not allowed as child/for parent", 3);
+            this.plugin.updateLogAndProcess(1, "Error creating page - type not allowed as child/for parent", 3);
             return false;
         } catch (MetadataTypeNotAllowedException e) {
-            plugin.updateLogAndProcess(1, "Error creating page - Metadata type not allowed", 3);
+            this.plugin.updateLogAndProcess(1, "Error creating page - Metadata type not allowed", 3);
             return false;
         }
     }
@@ -428,7 +512,7 @@ public class DocumentManager {
     }
 
     public void writeMetadataFile() throws WriteException, PreferencesException, IOException, InterruptedException, SwapException, DAOException {
-        process.writeMetadataFile(fileformat);
+        this.process.writeMetadataFile(this.fileformat);
     }
 
 }
