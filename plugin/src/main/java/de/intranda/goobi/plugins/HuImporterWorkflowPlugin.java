@@ -327,7 +327,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             try {
                 storageProvider.createDirectories(processedFolder);
             } catch (IOException e) {
-                updateLog("Error creating Folder for processd xls documents! Export aborted " + e.getMessage(), 3);
+                updateLog("Error creating Folder for processed xls documents! Export aborted " + e.getMessage(), 3);
                 return;
             }
         }
@@ -404,7 +404,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     this.failedImports.add(processFile.getFileName().toString());
                                     continue;
                                 }
-                                processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
                             }
 
                             updateLog("Start importing: " + process.getTitel(), 1);
@@ -414,7 +413,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
                                         imageFiles, nodeId);
                                 try {
-                                    dManager.addNodeIdToTopStruct(nodeId);
                                     dManager.addCatalogueId(nodeId);
                                 } catch (MetadataTypeNotAllowedException e) {
                                     updateLog(
@@ -442,7 +440,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 }
 
                                 // create the metadata fields by reading the config (and get content from the
-                                // content files of course)
+                                // content files)
                                 dManager.createStructureWithMetaData(row, mappingFields, imageFiles, subnodeId);
 
                             }
@@ -557,6 +555,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 continue;
                             }
 
+                            // end parsing after end row number
+                            if (importSet.getRowEnd() != 0 && row.getRowNum() >= importSet.getRowEnd()) {
+                                break;
+                            }
+
                             this.successful = true;
                             ProcessDescription processDescription = getProcessDescription(row, importSet, processFile);
                             if (processDescription == null) {
@@ -602,7 +605,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                         this.failedImports.add(processFile.getFileName().toString());
                                         continue;
                                     }
-                                    processDescription.getProcessProperties().put(ProcessProperties.PROCESSNAME.toString(), nodeId);
                                 }
 
                                 updateLog("Start importing: " + process.getTitel(), 1);
@@ -611,7 +613,6 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     try {
                                         dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
                                                 imageFiles, nodeId);
-                                        dManager.addNodeIdToTopStruct(nodeId);
                                         dManager.addCatalogueId(nodeId);
                                     } catch (MetadataTypeNotAllowedException e) {
                                         updateLog(

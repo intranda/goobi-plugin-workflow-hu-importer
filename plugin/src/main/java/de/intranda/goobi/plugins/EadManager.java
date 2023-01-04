@@ -57,7 +57,7 @@ public class EadManager {
             try {
                 this.selectedNode = findNode(importSet.getEadNode());
                 if (this.selectedNode != null) {
-                    archivePlugin.setSelectedEntry(this.selectedNode);
+                    this.archivePlugin.setSelectedEntry(this.selectedNode);
                 }
             } catch (NullPointerException ex) {
                 this.dbStatusOk = false;
@@ -67,13 +67,13 @@ public class EadManager {
     }
 
     private boolean checkDB() {
-        List<String> possibleDBs = archivePlugin.getPossibleDatabases();
+        List<String> possibleDBs = this.archivePlugin.getPossibleDatabases();
         return !possibleDBs.isEmpty() && StringUtils.isNotBlank(this.archivePlugin.getSelectedDatabase())
-                && this.archivePlugin.getSelectedDatabase().equals(importSet.getEadFile());
+                && this.archivePlugin.getSelectedDatabase().equals(this.importSet.getEadFile());
     }
 
     private IEadEntry findNode(String eadNode) throws NullPointerException {
-        return findNode(archivePlugin.getRootElement(), eadNode);
+        return findNode(this.archivePlugin.getRootElement(), eadNode);
     }
 
     // TODO maybe add nodes of type Node
@@ -90,31 +90,32 @@ public class EadManager {
     }
 
     public String addDocumentNodeWithMetadata(Row row, List<MappingField> mappingFields) {
-        archivePlugin.addNode();
-        IEadEntry entry = archivePlugin.getSelectedEntry();
+        this.archivePlugin.addNode();
+        IEadEntry entry = this.archivePlugin.getSelectedEntry();
         // set the prefered node type for the created node
-        for (INodeType nt : archivePlugin.getConfiguredNodes()) {
-            if (nt.getNodeName().equals(importSet.getEadType())) {
+        for (INodeType nt : this.archivePlugin.getConfiguredNodes()) {
+            if (nt.getNodeName().equals(this.importSet.getEadType())) {
                 entry.setNodeType(nt);
             }
         }
-        if (setNodeId) {
-            entry.setId(processName);
+        // if we are in EADMode we will use the process name (a UUID) as nodeId
+        if (this.setNodeId) {
+            entry.setId(this.processName);
         }
         addMetadata(entry, row, mappingFields);
         entry.setGoobiProcessTitle(entry.getId());
 
-        archivePlugin.createEadDocument();
+        this.archivePlugin.createEadDocument();
         return entry.getId();
     }
 
     public void saveArchiveAndLeave() {
-        archivePlugin.createEadDocument();
-        archivePlugin.saveArchiveAndLeave();
+        this.archivePlugin.createEadDocument();
+        this.archivePlugin.saveArchiveAndLeave();
     }
 
     public void cancelEdition() {
-        archivePlugin.cancelEdition();
+        this.archivePlugin.cancelEdition();
     }
 
     /**
@@ -191,28 +192,28 @@ public class EadManager {
     }
 
     public String addSubnodeWithMetaData(Row row, List<MappingField> mappingFields) {
-        String NodeType = importSet.getEadSubnodeType();
-        IEadEntry parent = archivePlugin.getSelectedEntry();
+        String NodeType = this.importSet.getEadSubnodeType();
+        IEadEntry parent = this.archivePlugin.getSelectedEntry();
         if (StringUtils.isBlank(NodeType)) {
             return null;
         }
 
-        archivePlugin.addNode();
-        IEadEntry entry = archivePlugin.getSelectedEntry();
+        this.archivePlugin.addNode();
+        IEadEntry entry = this.archivePlugin.getSelectedEntry();
         // set the prefered node type for the created node
-        for (INodeType nt : archivePlugin.getConfiguredNodes()) {
+        for (INodeType nt : this.archivePlugin.getConfiguredNodes()) {
             if (nt.getNodeName().equals(NodeType)) {
                 entry.setNodeType(nt);
-                entry.setGoobiProcessTitle(processName);
+                entry.setGoobiProcessTitle(this.processName);
                 addMetadata(entry, row, mappingFields);
-                archivePlugin.setSelectedEntry(parent);
+                this.archivePlugin.setSelectedEntry(parent);
                 return entry.getId();
             }
         }
 
         // if node type is invalid delete it
-        archivePlugin.deleteNode();
-        archivePlugin.setSelectedEntry(parent);
+        this.archivePlugin.deleteNode();
+        this.archivePlugin.setSelectedEntry(parent);
         return null;
     }
 
