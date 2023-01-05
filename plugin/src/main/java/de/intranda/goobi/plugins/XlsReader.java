@@ -5,6 +5,7 @@ import java.io.IOException;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -16,20 +17,22 @@ import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
 import lombok.Getter;
 
 public class XlsReader {
-    
+
     private Workbook workbook;
     @Getter
     private Sheet sheet;
+
     public XlsReader(String path) throws IOException {
-        
+
         FileInputStream inputStream = new FileInputStream(path);
         this.workbook = new XSSFWorkbook(inputStream);
-        this.sheet = workbook.getSheetAt(0);
+        this.sheet = this.workbook.getSheetAt(0);
     }
-    
+
     public void closeWorkbook() throws IOException {
         this.workbook.close();
     }
+
     /**
      * Read content vom excel cell
      * 
@@ -55,13 +58,11 @@ public class XlsReader {
                         if (imf.isBlankAfterSeparator()) {
                             result.append(" ");
                         }
-                    } else {
-                        //in case someone wants to use whitespace as seperator
-                        if (imf.getSeparator().length() > 0)
-                            result.append(imf.getSeparator());
-
+                    } else //in case someone wants to use whitespace as seperator
+                    if (imf.getSeparator().length() > 0) {
+                        result.append(imf.getSeparator());
                     }
-                    //add content of Cell 
+                    //add content of Cell
                     result.append(getCellContentSplit(row, cells[i]));
                 }
             }
@@ -79,8 +80,22 @@ public class XlsReader {
     public static String getCellContentSplit(Row row, String columnName) {
         Cell cell = row.getCell(CellReference.convertColStringToIndex(columnName));
         if (cell != null) {
-            DataFormatter dataFormatter = new DataFormatter();
-            return dataFormatter.formatCellValue(cell).trim();
+            if (cell.getCellType() == CellType.FORMULA) {
+                switch (cell.getCachedFormulaResultType()) {
+                    case BOOLEAN:
+                        return String.valueOf(cell.getBooleanCellValue());
+                    case NUMERIC:
+                        return String.valueOf(cell.getNumericCellValue());
+                    case STRING:
+                        return cell.getRichStringCellValue().toString();
+                    default:
+                        //TODO: Add Erromessage or throw Exception
+                        return "Formula ResultType not supported yet";
+                }
+            } else {
+                DataFormatter dataFormatter = new DataFormatter();
+                return dataFormatter.formatCellValue(cell).trim();
+            }
         }
         return null;
     }
