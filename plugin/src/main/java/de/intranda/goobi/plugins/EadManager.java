@@ -23,18 +23,17 @@ import lombok.Getter;
 public class EadManager {
     private ArchiveManagementAdministrationPlugin archivePlugin;
     private String processName;
+    private String CatalogIDDigital;
     private ImportSet importSet;
     private boolean setNodeId;
     private IEadEntry selectedNode = null;
     @Getter
     private boolean dbStatusOk;
 
-    public EadManager(ImportSet importSet, String processName, String processNamingMode) {
+    public EadManager(ImportSet importSet, String processName, String CatalogIDDigital) {
         this.importSet = importSet;
         this.processName = processName;
-
-        // if processNamingMode equals EAD use the UUID of the process as UUID of the new Node
-        this.setNodeId = "EAD".equalsIgnoreCase(processNamingMode);
+        this.CatalogIDDigital = CatalogIDDigital;
 
         // find out if archive file is locked currently
         IPlugin ia = PluginLoader.getPluginByTitle(PluginType.Administration, "intranda_administration_archive_management");
@@ -98,10 +97,9 @@ public class EadManager {
                 entry.setNodeType(nt);
             }
         }
-        // if we are in EADMode we will use the process name (a UUID) as nodeId
-        if (this.setNodeId) {
-            entry.setId(this.processName);
-        }
+        // use CatalogIDDigital as NodeID
+        entry.setId(this.CatalogIDDigital);
+
         addMetadata(entry, row, mappingFields);
         entry.setGoobiProcessTitle(entry.getId());
 

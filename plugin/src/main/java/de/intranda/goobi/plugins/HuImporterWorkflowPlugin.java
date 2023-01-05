@@ -390,7 +390,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                             EadManager eadManager = null;
                             String nodeId = null;
                             if (StringUtils.isNotBlank(importSet.getEadFile())) {
-                                eadManager = new EadManager(importSet, process.getTitel(), importSet.getProcessTitleMode());
+                                eadManager = new EadManager(importSet, process.getTitel(), dManager.getCatalogIDDIgital());
                                 if (eadManager.isDbStatusOk()) {
                                     nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(),
                                             processDescription.getMetaDataMapping());
@@ -410,14 +410,11 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                             if (processDescription != null && processDescription.getMetaDataMapping() != null) {
 
-                                dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
-                                        imageFiles, nodeId);
                                 try {
-                                    dManager.addCatalogueId(nodeId);
+                                    dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
+                                            imageFiles, nodeId);
                                 } catch (MetadataTypeNotAllowedException e) {
-                                    updateLog(
-                                            "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
-                                            3);
+                                    updateLog("Metadatatype CatalogIDDigital not allowed for TopStruct. Please update the ruleset.", 3);
                                 }
                             }
 
@@ -590,7 +587,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                 EadManager eadManager = null;
                                 String nodeId = null;
                                 if (StringUtils.isNotBlank(importSet.getEadFile())) {
-                                    eadManager = new EadManager(importSet, process.getTitel(), importSet.getProcessTitleMode());
+                                    eadManager = new EadManager(importSet, process.getTitel(), dManager.getCatalogIDDIgital());
                                     if (eadManager.isDbStatusOk()) {
                                         nodeId = eadManager.addDocumentNodeWithMetadata(processDescription.getRow(),
                                                 processDescription.getMetaDataMapping());
@@ -613,16 +610,13 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                                     try {
                                         dManager.addMetadataFromRowToTopStruct(processDescription.getRow(), processDescription.getMetaDataMapping(),
                                                 imageFiles, nodeId);
-                                        dManager.addCatalogueId(nodeId);
-                                    } catch (MetadataTypeNotAllowedException e) {
-                                        updateLog(
-                                                "Metadata field definition for nodeId is missing (needed to link document with ead-nodes)! Please update the ruleset.",
-                                                3);
                                     } catch (TypeNotAllowedForParentException e) {
                                         // this one catches an exception thrown by addMetadataFromRowToTopStruct
                                         updateLog(
                                                 "Type not allowed for Parent! Couldn't add substructure for image files. Please update the ruleset!",
                                                 3);
+                                    } catch (MetadataTypeNotAllowedException e) {
+                                        updateLog("Metadatatype CatalogIDDigital not allowed for TopStruct. Please update the ruleset.", 3);
                                     }
                                 }
                                 // write the metsfile
