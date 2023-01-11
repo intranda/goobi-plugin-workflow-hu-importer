@@ -156,6 +156,7 @@ public class DocumentManager {
                 try {
                     project = ProjectManager.getProjectByName(projectName);
                     process.setProjekt(project);
+                    process.setProjectId(project.getId());
                 } catch (DAOException e) {
                     plugin.updateLog(
                             "A Project with the name: " + projectName + " does not exist. Please update the configuration or create the Project.", 3);
@@ -483,9 +484,12 @@ public class DocumentManager {
 
             dsPage.addMetadata(mdTemp);
             ds.addReferenceTo(dsPage, "logical_physical");
+
+            // make sure images are always linked to logical docstruct too
             if (!ds.equals(logical)) {
                 logical.addReferenceTo(dsPage, "logical_physical");
             }
+
             // image name
             ContentFile cf = new ContentFile();
 
