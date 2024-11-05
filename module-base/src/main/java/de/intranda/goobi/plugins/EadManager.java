@@ -47,7 +47,7 @@ public class EadManager {
         } else {
             // prepare ArchivePlugin
             this.archivePlugin.getPossibleDatabases();
-            this.archivePlugin.setSelectedDatabase(importSet.getEadFile());
+            this.archivePlugin.setDatabaseName(importSet.getEadFile());
             this.archivePlugin.loadSelectedDatabase();
             this.dbStatusOk = checkDB();
         }
@@ -67,8 +67,8 @@ public class EadManager {
 
     private boolean checkDB() {
         List<String> possibleDBs = this.archivePlugin.getPossibleDatabases();
-        return !possibleDBs.isEmpty() && StringUtils.isNotBlank(this.archivePlugin.getSelectedDatabase())
-                && this.archivePlugin.getSelectedDatabase().equals(this.importSet.getEadFile());
+        return !possibleDBs.isEmpty() && StringUtils.isNotBlank(this.archivePlugin.getDatabaseName())
+                && this.archivePlugin.getDatabaseName().equals(this.importSet.getEadFile());
     }
 
     private IEadEntry findNode(String eadNode) throws NullPointerException {
@@ -103,12 +103,11 @@ public class EadManager {
         addMetadata(entry, row, mappingFields);
         entry.setGoobiProcessTitle(entry.getId());
 
-        this.archivePlugin.createEadDocument();
+        this.archivePlugin.updateSingleNode();
         return entry.getId();
     }
 
     public void saveArchiveAndLeave() {
-        this.archivePlugin.createEadDocument();
         this.archivePlugin.saveArchiveAndLeave();
     }
 
