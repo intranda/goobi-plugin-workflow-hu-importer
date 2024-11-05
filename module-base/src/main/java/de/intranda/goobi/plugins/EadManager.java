@@ -17,7 +17,6 @@ import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.ImportSet;
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
 import de.intranda.goobi.plugins.model.FieldValue;
 import de.sub.goobi.helper.Helper;
-import io.goobi.workflow.locking.LockingBean;
 import lombok.Getter;
 
 public class EadManager {
@@ -41,16 +40,12 @@ public class EadManager {
 
         User user = Helper.getCurrentUser();
         String username = user != null ? user.getNachVorname() : "-";
-        if (!LockingBean.lockObject(importSet.getEadFile(), username)) {
-            this.dbStatusOk = false;
-            return;
-        } else {
-            // prepare ArchivePlugin
-            this.archivePlugin.getPossibleDatabases();
-            this.archivePlugin.setDatabaseName(importSet.getEadFile());
-            this.archivePlugin.loadSelectedDatabase();
-            this.dbStatusOk = checkDB();
-        }
+
+        // prepare ArchivePlugin
+        this.archivePlugin.getPossibleDatabases();
+        this.archivePlugin.setDatabaseName(importSet.getEadFile());
+        this.archivePlugin.loadSelectedDatabase();
+        this.dbStatusOk = checkDB();
 
         if (this.dbStatusOk) {
             try {
@@ -67,6 +62,7 @@ public class EadManager {
 
     private boolean checkDB() {
         List<String> possibleDBs = this.archivePlugin.getPossibleDatabases();
+        List<String> possibleDBs = this.archivePlugin.getPossibleDatabaseNames();
         return !possibleDBs.isEmpty() && StringUtils.isNotBlank(this.archivePlugin.getDatabaseName())
                 && this.archivePlugin.getDatabaseName().equals(this.importSet.getEadFile());
     }
