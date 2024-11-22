@@ -61,7 +61,6 @@ public class EadManager {
     }
 
     private boolean checkDB() {
-        List<String> possibleDBs = this.archivePlugin.getPossibleDatabases();
         List<String> possibleDBs = this.archivePlugin.getPossibleDatabaseNames();
         return !possibleDBs.isEmpty() && StringUtils.isNotBlank(this.archivePlugin.getDatabaseName())
                 && this.archivePlugin.getDatabaseName().equals(this.importSet.getEadFile());
