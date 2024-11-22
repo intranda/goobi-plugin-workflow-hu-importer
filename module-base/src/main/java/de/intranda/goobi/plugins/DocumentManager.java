@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.Row;
 import org.goobi.beans.Process;
@@ -47,6 +48,7 @@ import ugh.exceptions.TypeNotAllowedForParentException;
 import ugh.exceptions.WriteException;
 import ugh.fileformats.mets.MetsMods;
 
+@Slf4j
 public class DocumentManager {
     @Getter
     private Process process;
@@ -283,6 +285,7 @@ public class DocumentManager {
                     try {
                         addMetadata(docStruct, mappingField, cellContent, gndUri);
                     } catch (MetadataTypeNotAllowedException e) {
+                        log.error("Invalid mapping: mappingField.type={}, mappingField.mets={}, cellContent={}", mappingField.getType(), mappingField.getMets(), cellContent);
                         this.plugin.updateLogAndProcess(this.process.getId(), "Invalid Mapping for Field " + mappingField.getType()
                                 + " in MappingSet " + this.importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
                     }
