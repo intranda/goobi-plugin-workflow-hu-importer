@@ -20,6 +20,12 @@
     </repository>
   </repositories>
   <dependencies>
+      <dependency>
+      <groupId>io.goobi.workflow.plugin</groupId>
+      <artifactId>plugin-administration-archive-management-lib</artifactId>
+      <version>24.12-SNAPSHOT</version>
+      <scope>compile</scope>
+    </dependency>
     <dependency>
       <groupId>io.goobi.workflow</groupId>
       <artifactId>workflow-core</artifactId>

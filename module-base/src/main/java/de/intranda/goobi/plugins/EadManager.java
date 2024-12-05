@@ -5,8 +5,9 @@ import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.Row;
-import org.goobi.beans.User;
+import org.goobi.interfaces.IArchiveManagementAdministrationPlugin;
 import org.goobi.interfaces.IEadEntry;
+import org.goobi.interfaces.IFieldValue;
 import org.goobi.interfaces.IMetadataField;
 import org.goobi.interfaces.INodeType;
 import org.goobi.production.enums.PluginType;
@@ -15,31 +16,25 @@ import org.goobi.production.plugin.interfaces.IPlugin;
 
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.ImportSet;
 import de.intranda.goobi.plugins.HuImporterWorkflowPlugin.MappingField;
-import de.intranda.goobi.plugins.model.FieldValue;
-import de.sub.goobi.helper.Helper;
 import lombok.Getter;
 
 public class EadManager {
-    private ArchiveManagementAdministrationPlugin archivePlugin;
+    private IArchiveManagementAdministrationPlugin archivePlugin;
     private String processName;
-    private String CatalogIDDigital;
+    private String catalogIDDigital;
     private ImportSet importSet;
-    private boolean setNodeId;
     private IEadEntry selectedNode = null;
     @Getter
     private boolean dbStatusOk;
 
-    public EadManager(ImportSet importSet, String processName, String CatalogIDDigital) {
+    public EadManager(ImportSet importSet, String processName, String catalogIDDigital) {
         this.importSet = importSet;
         this.processName = processName;
-        this.CatalogIDDigital = CatalogIDDigital;
+        this.catalogIDDigital = catalogIDDigital;
 
         // find out if archive file is locked currently
         IPlugin ia = PluginLoader.getPluginByTitle(PluginType.Administration, "intranda_administration_archive_management");
-        this.archivePlugin = (ArchiveManagementAdministrationPlugin) ia;
-
-        User user = Helper.getCurrentUser();
-        String username = user != null ? user.getNachVorname() : "-";
+        this.archivePlugin = (IArchiveManagementAdministrationPlugin) ia;
 
         // prepare ArchivePlugin
         this.archivePlugin.getPossibleDatabases();
@@ -61,7 +56,7 @@ public class EadManager {
     }
 
     private boolean checkDB() {
-        List<String> possibleDBs = this.archivePlugin.getPossibleDatabaseNames();
+        List<String> possibleDBs = this.archivePlugin.getPossibleDatabases();
         return !possibleDBs.isEmpty() && StringUtils.isNotBlank(this.archivePlugin.getDatabaseName())
                 && this.archivePlugin.getDatabaseName().equals(this.importSet.getEadFile());
     }
@@ -93,7 +88,7 @@ public class EadManager {
             }
         }
         // use CatalogIDDigital as NodeID
-        entry.setId(this.CatalogIDDigital);
+        entry.setId(this.catalogIDDigital);
 
         addMetadata(entry, row, mappingFields);
         entry.setGoobiProcessTitle(entry.getId());
@@ -139,42 +134,41 @@ public class EadManager {
      * @param fieldValue
      */
     private void addEadMetadata(IEadEntry entry, String fieldName, String fieldValue) {
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getIdentityStatementAreaList())) {
+        if (addEadMetadata(fieldName, fieldValue, entry.getIdentityStatementAreaList())) {
             return;
         }
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getContextAreaList())) {
+        if (addEadMetadata(fieldName, fieldValue, entry.getContextAreaList())) {
             return;
         }
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getContentAndStructureAreaAreaList())) {
+        if (addEadMetadata(fieldName, fieldValue, entry.getContentAndStructureAreaAreaList())) {
             return;
         }
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getAccessAndUseAreaList())) {
+        if (addEadMetadata(fieldName, fieldValue, entry.getAccessAndUseAreaList())) {
             return;
         }
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getAlliedMaterialsAreaList())) {
+        if (addEadMetadata(fieldName, fieldValue, entry.getAlliedMaterialsAreaList())) {
             return;
         }
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getNotesAreaList())) {
+        if (addEadMetadata(fieldName, fieldValue, entry.getNotesAreaList())) {
             return;
         }
-        if (addEadMetadata(entry, fieldName, fieldValue, entry.getDescriptionControlAreaList())) {
-            return;
-        }
+
+        addEadMetadata(fieldName, fieldValue, entry.getDescriptionControlAreaList());
     }
 
     /**
      * iterate through all metadata fields of a specific list
      * 
-     * @param entry
      * @param fieldName
      * @param fieldValue
      * @param list
      * @return
      */
-    private boolean addEadMetadata(IEadEntry entry, String fieldName, String fieldValue, List<IMetadataField> list) {
+    private boolean addEadMetadata(String fieldName, String fieldValue, List<IMetadataField> list) {
         for (IMetadataField field : list) {
             if (field.getName().equals(fieldName)) {
-                FieldValue value = new FieldValue(field);
+
+                IFieldValue value = field.createFieldValue();
                 value.setValue(fieldValue.trim());
                 field.setValues(Arrays.asList(value));
                 return true;
@@ -184,9 +178,9 @@ public class EadManager {
     }
 
     public String addSubnodeWithMetaData(Row row, List<MappingField> mappingFields) {
-        String NodeType = this.importSet.getEadSubnodeType();
+        String nodeType = this.importSet.getEadSubnodeType();
         IEadEntry parent = this.archivePlugin.getSelectedEntry();
-        if (StringUtils.isBlank(NodeType)) {
+        if (StringUtils.isBlank(nodeType)) {
             return null;
         }
 
@@ -194,7 +188,7 @@ public class EadManager {
         IEadEntry entry = this.archivePlugin.getSelectedEntry();
         // set the prefered node type for the created node
         for (INodeType nt : this.archivePlugin.getConfiguredNodes()) {
-            if (nt.getNodeName().equals(NodeType)) {
+            if (nt.getNodeName().equals(nodeType)) {
                 entry.setNodeType(nt);
                 entry.setGoobiProcessTitle(this.processName);
                 addMetadata(entry, row, mappingFields);

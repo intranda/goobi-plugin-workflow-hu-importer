@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.Row;
 import org.goobi.beans.Process;
@@ -29,6 +28,7 @@ import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.ProjectManager;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import ugh.dl.ContentFile;
 import ugh.dl.Corporate;
 import ugh.dl.DigitalDocument;
@@ -61,7 +61,7 @@ public class DocumentManager {
     private DocStruct logical;
     private DocStruct physical;
     private ImportSet importSet;
-    private int PageCount = 0;
+    private int pageCount = 0;
     private DocStruct structure;
     private VariableReplacer replacer;
     @Getter
@@ -125,7 +125,7 @@ public class DocumentManager {
             ff.setDigitalDocument(dd);
 
             // add the physical basics
-            DocStruct physical = dd.createDocStruct(this.prefs.getDocStrctTypeByName("BoundBook"));
+            physical = dd.createDocStruct(this.prefs.getDocStrctTypeByName("BoundBook"));
             dd.setPhysicalDocStruct(physical);
 
             // try to use publicationtype from xlsx if it wasn't specified use fallback type from importset
@@ -141,11 +141,11 @@ public class DocumentManager {
             if (dstype == null) {
                 throw new ProcessCreationException("Couldn't find publication type: " + importSet.getPublicationType() + " in the ruleset.");
             }
-            DocStruct logic = dd.createDocStruct(dstype);
-            dd.setLogicalDocStruct(logic);
+            logical = dd.createDocStruct(dstype);
+            dd.setLogicalDocStruct(logical);
 
             // save the process
-            Process process = bhelp.createAndSaveNewProcess(template, processname, ff);
+            process = bhelp.createAndSaveNewProcess(template, processname, ff);
             plugin.updateLog("Process successfully created with ID: " + process.getId(), 2);
 
             // add some properties
@@ -165,12 +165,9 @@ public class DocumentManager {
                 }
             }
 
-            this.process = process;
             // read fileformat etc. from process
             this.fileformat = this.process.readMetadataFile();
             this.digitalDocument = this.fileformat.getDigitalDocument();
-            this.logical = this.digitalDocument.getLogicalDocStruct();
-            this.physical = this.digitalDocument.getPhysicalDocStruct();
             //initialize variable replacer
             this.replacer = new VariableReplacer(this.fileformat.getDigitalDocument(), this.prefs, this.process, null);
 
@@ -205,16 +202,6 @@ public class DocumentManager {
         }
     }
 
-    //    public void addMetaDataToTopStruct(MappingField mappingField, String cellContent, String gndUri)
-    //            throws MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-    //        addMetadata(this.logical, mappingField, cellContent, gndUri);
-    //    }
-
-    //    public void addMetadataToStructure(MappingField mappingField, String cellContent, String gndUri)
-    //            throws TypeNotAllowedForParentException, MetadataTypeNotAllowedException, TypeNotAllowedAsChildException {
-    //        addMetadata(this.structure, mappingField, cellContent, gndUri);
-    //    }
-
     private DocStruct createStructure(String structType) throws TypeNotAllowedForParentException {
         DocStructType dsType = this.prefs.getDocStrctTypeByName(structType);
         if (dsType != null) {
@@ -237,7 +224,7 @@ public class DocumentManager {
     }
 
     public void createStructureWithMetaData(Row row, List<MappingField> mappingFields, Set<Path> imageFiles, String nodeId)
-            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, IOException, InterruptedException, SwapException, DAOException {
+            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, IOException, SwapException, DAOException {
         // look if structureType is defined in table
         MappingField mFieldStructureType =
                 mappingFields.stream().filter(mappingField -> "structureType".equals(mappingField.getType())).findFirst().orElse(null);
@@ -285,7 +272,8 @@ public class DocumentManager {
                     try {
                         addMetadata(docStruct, mappingField, cellContent, gndUri);
                     } catch (MetadataTypeNotAllowedException e) {
-                        log.error("Invalid mapping: mappingField.type={}, mappingField.mets={}, cellContent={}", mappingField.getType(), mappingField.getMets(), cellContent);
+                        log.error("Invalid mapping: mappingField.type={}, mappingField.mets={}, cellContent={}", mappingField.getType(),
+                                mappingField.getMets(), cellContent);
                         this.plugin.updateLogAndProcess(this.process.getId(), "Invalid Mapping for Field " + mappingField.getType()
                                 + " in MappingSet " + this.importSet.getMapping() + " for METs: " + mappingField.getMets(), 3);
                     }
@@ -433,7 +421,7 @@ public class DocumentManager {
     }
 
     private void copyFileToTarget(String target, MappingField mappingField, String cellContent, Set<Path> imageFiles)
-            throws IOException, SwapException, DAOException {
+            throws IOException {
         StorageProviderInterface storageProvider = StorageProvider.getInstance();
         String[] fileNames = cellContent.split(mappingField.getSeparator());
         for (String fileName : fileNames) {
@@ -471,12 +459,12 @@ public class DocumentManager {
         try {
             DocStructType newPage = this.prefs.getDocStrctTypeByName("page");
             DocStruct dsPage = this.digitalDocument.createDocStruct(newPage);
-            this.PageCount++;
+            this.pageCount++;
             // physical page no
             this.physical.addChild(dsPage);
             MetadataType mdt = this.prefs.getMetadataTypeByName("physPageNumber");
             Metadata mdTemp = new Metadata(mdt);
-            mdTemp.setValue(String.valueOf(this.PageCount));
+            mdTemp.setValue(String.valueOf(this.pageCount));
             dsPage.addMetadata(mdTemp);
 
             // logical page no
@@ -499,8 +487,8 @@ public class DocumentManager {
             cf.setLocation("file://" + imageFile.getName());
 
             dsPage.addContentFile(cf);
-            if (this.PageCount % 10 == 0) {
-                this.plugin.updateLog("Created " + this.PageCount + " physical Pages for Process with Id: " + this.process.getId());
+            if (this.pageCount % 10 == 0) {
+                this.plugin.updateLog("Created " + this.pageCount + " physical Pages for Process with Id: " + this.process.getId());
             }
             return true;
         } catch (TypeNotAllowedAsChildException | TypeNotAllowedForParentException e) {
@@ -519,18 +507,16 @@ public class DocumentManager {
         String gnd = null;
         int index = gndUri.lastIndexOf('/');
         if (index < 0) {
-            // plugin.updateLogAndProcess(process.getId(), "Couldn't parse gndUri ", 3);
-            // better to be optimistic, maybe it's a gnd without authority uri
             gnd = gndUri.trim();
         } else {
             gnd = gndUri.substring(index + 1);
         }
         if (StringUtils.isNotBlank(gnd)) {
-            metadata.setAutorityFile("gnd", "http://d-nb.info/gnd/", gnd);
+            metadata.setAuthorityFile("gnd", "http://d-nb.info/gnd/", gnd);
         }
     }
 
-    public void writeMetadataFile() throws WriteException, PreferencesException, IOException, InterruptedException, SwapException, DAOException {
+    public void writeMetadataFile() throws WriteException, PreferencesException, IOException, SwapException {
         this.process.writeMetadataFile(this.fileformat);
     }
 

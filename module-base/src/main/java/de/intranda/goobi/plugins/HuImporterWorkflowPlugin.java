@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -52,13 +53,15 @@ import ugh.exceptions.WriteException;
 @PluginImplementation
 @Log4j2
 public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
+
+    private static final long serialVersionUID = -8921468910160725693L;
     @Getter
-    private ArrayList<LogMessage> errorList = new ArrayList<>();
+    private transient List<LogMessage> errorList = new ArrayList<>();
     @Getter
     private String title = "intranda_workflow_hu_importer";
     private long lastPush = System.currentTimeMillis();
     @Getter
-    private List<ImportSet> importSets;
+    private transient List<ImportSet> importSets;
     private PushContext pusher;
     private XMLConfiguration config = null;
     @Getter
@@ -70,7 +73,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     int itemsTotal = 0;
     @Getter
-    private Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
+    private transient Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
 
     private ArrayList<String> failedImports;
     private boolean successful = true;
@@ -168,14 +171,13 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (HierarchicalConfiguration node : this.config.configurationsAt("mappingSet")) {
             String name = node.getString("[@name]");
             if (name.equals(mappingName)) {
-                // log.debug("Configured mapping was found: " + name);
                 mappingNode = node;
                 break;
             }
         }
         // if mapping node was not found, send back error message
         if (mappingNode == null) {
-            return null;
+            return Collections.emptyList();
         }
 
         // create a list of all fields to import
@@ -207,7 +209,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             updateLog(message, 3);
 
         }
-        return null;
+        return Collections.emptyList();
     }
 
     /**
@@ -226,7 +228,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             HashMap<String, String> processProperties = new HashMap<>();
 
             MappingField fileNameColumn = null;
-            if (processMetadata == null) {
+            if (processMetadata.isEmpty()) {
                 updateLog("No valid ImportSetDescription with the Name: " + mappingSet + " was found!", 3);
                 this.failedImports.add(processFile.getFileName().toString());
                 return null;
@@ -316,7 +318,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // read mappings
 
         List<MappingField> mappingFields = getMapping(importSet.getMapping());
-        if (mappingFields == null || mappingFields.isEmpty()) {
+        if (mappingFields.isEmpty()) {
             updateLog("Import could not be executed because no MappingSet with the name " + importSet.getMapping() + "  was found!", 3);
             return;
         }
@@ -349,17 +351,17 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             runnable = () -> {
 
                 // create list with files in metadata folder of importSet
-                List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
+                List<Path> filesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
                 updateLog("Run through all import files");
-                this.itemsTotal = FilesToRead.size();
+                this.itemsTotal = filesToRead.size();
                 this.itemCurrent = 0;
                 Process process = null;
                 try {
 
-                    if (FilesToRead.isEmpty()) {
+                    if (filesToRead.isEmpty()) {
                         updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
                     }
-                    for (Path processFile : FilesToRead) {
+                    for (Path processFile : filesToRead) {
                         this.successful = true;
                         ProcessDescription processDescription = getProcessDescription(null, importSet, processFile);
                         if (processDescription == null && !StringUtils.isBlank(importSet.getImportSetDescription())) {
@@ -514,7 +516,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     this.run = false;
                     Thread.sleep(1000);
                     updateLog("Import completed.", 2);
-                    if (this.failedImports.size() > 0) {
+                    if (!this.failedImports.isEmpty()) {
                         updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
                         updateLog(this.failedImports.size() + " Import(s) finished with errors!", 3);
                         this.failedImports.forEach((importFile) -> {
@@ -533,15 +535,15 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         } else {
             runnable = () -> {
                 // create list with files in metadata folder of importSet
-                List<Path> FilesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
+                List<Path> filesToRead = storageProvider.listFiles(importSet.getMetadataFolder(), HuImporterWorkflowPlugin::isRegularAndNotHidden);
                 updateLog("Run through all import files");
                 Process process = null;
                 try {
 
-                    if (FilesToRead.isEmpty()) {
+                    if (filesToRead.isEmpty()) {
                         updateLog("There are no files in the folder: " + importSet.getMetadataFolder(), 3);
                     }
-                    fileLoop: for (Path processFile : FilesToRead) {
+                    fileLoop: for (Path processFile : filesToRead) {
                         XlsReader reader = new XlsReader(processFile.toString());
                         Sheet sheet = reader.getSheet();
                         this.itemCurrent = 0;
@@ -695,7 +697,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     this.run = false;
                     Thread.sleep(1000);
                     updateLog("Import completed.", 2);
-                    if (this.failedImports.size() > 0) {
+                    if (!this.failedImports.isEmpty()) {
                         updateLog("We encountered errors during the import. Please check the logfile and the process logs!", 3);
                         updateLog(this.failedImports.size() + " Import(s) finished with errors!", 3);
                         this.failedImports.forEach((importFile) -> {
@@ -765,7 +767,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public void updateLogAndProcess(int processId, String message, int level) {
         LogType type = (level == 3) ? LogType.ERROR : (level == 1) ? LogType.DEBUG : LogType.INFO;
 
-        Helper.addMessageToProcessLog(processId, type, message);
+        Helper.addMessageToProcessJournal(processId, type, message);
         updateLog(message, level);
     }
 
@@ -827,7 +829,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private int rowEnd;
         private String processTitleMode;
         private String importSetDescription;
-        private String DescriptionMappingSet;
+        private String descriptionMappingSet;
         private String eadType;
         private String eadFile;
         private String eadNode;
@@ -847,7 +849,7 @@ public class HuImporterWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public class ProcessDescription {
         private Row row;
         private List<MappingField> metaDataMapping;
-        private HashMap<String, String> ProcessProperties;
+        private HashMap<String, String> processProperties;
         private Path fileName;
     }
 }
