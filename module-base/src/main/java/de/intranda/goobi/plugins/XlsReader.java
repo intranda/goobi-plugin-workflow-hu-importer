@@ -24,9 +24,10 @@ public class XlsReader {
 
     public XlsReader(String path) throws IOException {
 
-        FileInputStream inputStream = new FileInputStream(path);
-        this.workbook = new XSSFWorkbook(inputStream);
-        this.sheet = this.workbook.getSheetAt(0);
+        try (FileInputStream inputStream = new FileInputStream(path)) {
+            this.workbook = new XSSFWorkbook(inputStream);
+            this.sheet = this.workbook.getSheetAt(0);
+        }
     }
 
     public void closeWorkbook() throws IOException {

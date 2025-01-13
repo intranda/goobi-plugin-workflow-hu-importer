@@ -3,8 +3,10 @@
   <parent>
     <groupId>io.goobi.workflow.plugin</groupId>
     <artifactId>plugin-workflow-hu-importer</artifactId>
-    <version>24.09</version>
+    <version>24.12</version>
   </parent>
   <artifactId>plugin-workflow-hu-importer-base</artifactId>
   <packaging>jar</packaging>
+  <dependencies>
+  </dependencies>
 </project>

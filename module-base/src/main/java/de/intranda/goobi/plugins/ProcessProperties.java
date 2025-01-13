@@ -10,7 +10,7 @@ public enum ProcessProperties {
         this.notation = notation;
     }
 
-    final private String notation;
+    private final String notation;
 
     @Override
     public String toString() {
