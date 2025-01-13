@@ -23,7 +23,7 @@
       <dependency>
       <groupId>io.goobi.workflow.plugin</groupId>
       <artifactId>plugin-administration-archive-management-lib</artifactId>
-      <version>24.12-SNAPSHOT</version>
+      <version>24.12</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
