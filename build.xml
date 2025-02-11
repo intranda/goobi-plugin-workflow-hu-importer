@@ -1,15 +1,15 @@
 <project default="devbuild">
 
 	<!-- Simply set the name of the plugin here, e.g. "xyz" or "xyz_abc") instead of "sample" -->
-	<property name="name" value="hu_importer" />
+	<property name="name" value="hu-importer" />
 
 	<!-- Use this task to let ant copy the compiled jar files to the target folders for development  -->
 	<target name="devbuild">
 		<exec executable="mvn">
 			<arg value="package" />
 		</exec>
-		<copy file="module-main/target/plugin_intranda_workflow_${name}.jar" todir="/opt/digiverso/goobi/plugins/workflow/" overwrite="true" />
-		<copy file="module-gui/target/plugin_intranda_workflow_${name}-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/" overwrite="true" />
+		<copy file="module-base/target/plugin-workflow-${name}-base.jar" todir="/opt/digiverso/goobi/plugins/workflow/" overwrite="true" />
+		<copy file="module-gui/target/plugin-workflow-${name}-gui.jar" todir="/opt/digiverso/goobi/plugins/GUI/" overwrite="true" />
 	</target>
 
 	<!-- Use this task to let ant copy the compiled jar files to the target folders for development  -->
@@ -17,7 +17,7 @@
 		<exec executable="mvn">
 			<arg value="package" />
 		</exec>
-		<copy file="module-main/target/plugin_intranda_workflow_${name}.jar" todir="/opt/digiverso/g2g/workspace/workflow/plugins/workflow/" overwrite="true" />
-		<copy file="module-gui/target/plugin_intranda_workflow_${name}-GUI.jar" todir="/opt/digiverso/g2g/workspace/workflow/plugins/GUI/" overwrite="true" />
+		<copy file="module-base/target/plugin-workflow-${name}-base.jar" todir="/opt/digiverso/g2g/workspace/workflow/plugins/workflow/" overwrite="true" />
+		<copy file="module-gui/target/plugin-workflow-${name}-gui.jar" todir="/opt/digiverso/g2g/workspace/workflow/plugins/GUI/" overwrite="true" />
 	</target>
 </project>
