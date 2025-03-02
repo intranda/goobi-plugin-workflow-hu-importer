@@ -168,6 +168,7 @@ public class DocumentManager {
             // read fileformat etc. from process
             this.fileformat = this.process.readMetadataFile();
             this.digitalDocument = this.fileformat.getDigitalDocument();
+            logical = digitalDocument.getLogicalDocStruct();
             //initialize variable replacer
             this.replacer = new VariableReplacer(this.fileformat.getDigitalDocument(), this.prefs, this.process, null);
 
