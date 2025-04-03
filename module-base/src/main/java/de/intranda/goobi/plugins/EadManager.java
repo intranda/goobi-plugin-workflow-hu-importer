@@ -82,7 +82,7 @@ public class EadManager {
         this.archivePlugin.addNode();
         IEadEntry entry = this.archivePlugin.getSelectedEntry();
         // set the prefered node type for the created node
-        for (INodeType nt : this.archivePlugin.getConfiguredNodes()) {
+        for (INodeType nt : this.archivePlugin.getConfig().getConfiguredNodes()) {
             if (nt.getNodeName().equals(this.importSet.getEadType())) {
                 entry.setNodeType(nt);
             }
@@ -187,7 +187,7 @@ public class EadManager {
         this.archivePlugin.addNode();
         IEadEntry entry = this.archivePlugin.getSelectedEntry();
         // set the prefered node type for the created node
-        for (INodeType nt : this.archivePlugin.getConfiguredNodes()) {
+        for (INodeType nt : this.archivePlugin.getConfig().getConfiguredNodes()) {
             if (nt.getNodeName().equals(nodeType)) {
                 entry.setNodeType(nt);
                 entry.setGoobiProcessTitle(this.processName);
