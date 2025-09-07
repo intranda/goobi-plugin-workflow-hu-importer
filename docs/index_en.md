@@ -3,6 +3,10 @@ title: Mass import from Excel data with EAD enrichment
 identifier: intranda_workflow_hu_importer
 description: This workflow plugin for Goobi workflow allows the bulk import of data starting from metadata within Excel files.
 published: true
+keywords:
+    - Goobi workflow
+    - Plugin
+    - Workflow Plugin
 ---
 ## Introduction
 This workflow plugin for Goobi workflow allows a mass import of metadata from Excel files, creating not only tasks in Goobi, each of which has a METS file. In addition, an existing EAD file is enriched with further nodes. 
