@@ -9,7 +9,8 @@
     xmlns:o="http://omnifaces.org/ui"
     xmlns:p="http://primefaces.org/ui"
     xmlns:jsf="http://xmlns.jcp.org/jsf"
-    xmlns:section="http://goobi.io/section">
+    xmlns:section="http://goobi.io/section"
+    xmlns:util="http://goobi.io/util">
 
 	<composite:interface>
 	</composite:interface>
@@ -50,6 +51,12 @@
 				display: block;
 				margin-top: 20px;
 				padding: 5px;
+			}
+			.feed-item-icon .icon-wrapper {
+				color: var(--clr-neutral-400);
+			}
+			.feed-item {
+				align-items: center;
 			}
 			</style>
 		<h:panelGroup
@@ -107,15 +114,10 @@
 										data-bs-toggle="tooltip"
 										title="#{msgs.plugin_intranda_workflow_hu_import_startImportTitle}">
 										<button
-											class="btn btn-action dropdown-toggle"
+											class="btn btn-action dropdown-toggle d-inline-flex align-items-center gap-2"
 											data-bs-toggle="dropdown"
 											type="button">
-											<span
-												class="fa fa-play-circle"
-												aria-hidden="true" />
-											<span>
-												#{msgs.plugin_intranda_workflow_hu_import_startImport}
-											</span>
+											<util:icon-text icon="player-play" text="#{msgs.plugin_intranda_workflow_hu_import_startImport}" />
 										</button>
 										<ul class="dropdown-menu dropdown-menu-end">
 											<ui:repeat var="importset"
@@ -161,16 +163,16 @@
 									<li class="feed-item">
 										<span class="feed-item-icon fs-600">
 											<ui:fragment rendered="#{log.level eq 0}">
-												<span class="fa fa-desktop" aria-hidden="true" />
+												<util:icon icon="device-desktop" />
 											</ui:fragment>
 											<ui:fragment rendered="#{log.level eq 1}">
-												<span class="fa fa-info-circle" aria-hidden="true" />
+												<util:icon icon="info-circle" />
 											</ui:fragment>
 											<ui:fragment rendered="#{log.level eq 2}">
-												<span class="fa fa-exclamation-circle" aria-hidden="true" />
+												<util:icon icon="alert-circle" />
 											</ui:fragment>
 											<ui:fragment rendered="#{log.level eq 3}">
-												<span class="text-danger fa fa-exclamation-triangle" aria-hidden="true" />
+												<util:icon icon="alert-triangle" styleClass="icon--danger" />
 											</ui:fragment>
                                             <span class="
                                                 filler filler-vertical
@@ -200,16 +202,16 @@
 									<li class="feed-item">
 										<span class="feed-item-icon fs-600">
 											<ui:fragment rendered="#{log.level eq 0}">
-												<span class="fa fa-desktop" aria-hidden="true" />
+												<util:icon icon="device-desktop" />
 											</ui:fragment>
 											<ui:fragment rendered="#{log.level eq 1}">
-												<span class="fa fa-info-circle" aria-hidden="true" />
+												<util:icon icon="info-circle" />
 											</ui:fragment>
 											<ui:fragment rendered="#{log.level eq 2}">
-												<span class="fa fa-exclamation-circle" aria-hidden="true" />
+												<util:icon icon="alert-circle" />
 											</ui:fragment>
 											<ui:fragment rendered="#{log.level eq 3}">
-												<span class="text-danger fa fa-exclamation-triangle" aria-hidden="true" />
+												<util:icon icon="alert-triangle" styleClass="icon--danger" />
 											</ui:fragment>
                                             <span class="
                                                 filler filler-vertical
