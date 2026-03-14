@@ -57,7 +57,7 @@ The plugin is configured via the configuration file `plugin_intranda_workflow_hu
 
 	<!--import set for excel files
 	Attributes in [] are optional
-		name: name of the import set, which will be displayed in the dropdonwnmenu
+		name: name of the import set, which will be displayed in the dropdown menu
 		metadataFolder: where are the documents located
 		[mediaFolder]: where are the media files located
 		workflow: the workflow that shall be used
@@ -204,5 +204,5 @@ An element of the type 'mappingSet' has only the attribute 'name'. This allows i
 |`FileName`| This type must be used to specify the process description file name column. This field type is therefore only useful in a `descriptionMappingSet`.  |
 |`ProcessName` | This type must be used to specify the column with the future process name.  |
 |`PublicationType` | If the type `PublicationType` is used, the value from the cell is used as the publication type. If the cell is empty, the `PublicationType` set in the `ImportSet` attribute is used. The type is only used for creating the top structure item of a process.|
-|`structureType`| If the type `structureType` is used, the value from the cell is used as the structure type. If the cell is empty, the `sturctureType` specified in the `ImportSet` attribute is used. The type is only used for creating structure elements of an operation, i.e. its sub-elements. In relation to a book, this corresponds to the title pages and chapters, for example. |
+|`structureType`| If the type `structureType` is used, the value from the cell is used as the structure type. If the cell is empty, the `structureType` specified in the `ImportSet` attribute is used. The type is only used for creating structure elements of an operation, i.e. its sub-elements. In relation to a book, this corresponds to the title pages and chapters, for example. |
 
