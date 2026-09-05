@@ -1,6 +1,9 @@
 # Goobi workflow Plugin: goobi-plugin-workflow-hu-importer
 
-<img src="https://goobi.io/wp-content/uploads/logo_goobi_plugin.png" align="right" style="margin:0 0 20px 20px;" alt="Plugin for Goobi workflow" width="175" height="109">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://goobi.io/logo_goobi_workflow_dark.png">
+  <img src="https://goobi.io/logo_goobi_workflow.png" align="right" alt="Plugin for Goobi workflow" width="240" height="132" hspace="20" vspace="10">
+</picture>
 
 This Workflow plugin for Goobi workflow was developed for the HU Berlin and allows a mass import of Goobi processes from multiple custom Excel files. Each Excel file results in its own process with lots of structure elements and images. Global metadata for the process is coming additionally from a separate Excel file, too.
 
